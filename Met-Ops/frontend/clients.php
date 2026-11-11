@@ -11,13 +11,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $action = (string)($_POST['action'] ?? '');
         $name = trim((string)($_POST['client_name'] ?? ''));
+        $tin = trim((string)($_POST['tin'] ?? ''));
+        $address = trim((string)($_POST['business_address'] ?? ''));
+        $terms = trim((string)($_POST['payment_terms'] ?? ''));
         $active = ($_POST['active'] ?? '1') === '1' ? 1 : 0;
         $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (!in_array($action, ['save_client', 'update_client'], true) || $name === '' || mb_strlen($name) > 180) throw new RuntimeException('Enter a client name of 180 characters or fewer.');
+        if (mb_strlen($tin) > 40 || strlen($address) > 65535 || mb_strlen($terms) > 100) throw new RuntimeException('TIN, address, or payment terms exceed the allowed length.');
         if ($action === 'update_client') {
             if (!$id) throw new RuntimeException('Invalid client.');
-            $q = $pdo->prepare('UPDATE clients SET client_name=?,active=? WHERE id=?');
-            $q->execute([$name, $active, $id]);
+            $q = $pdo->prepare('UPDATE clients SET client_name=?,tin=?,business_address=?,payment_terms=?,active=? WHERE id=?');
+            $q->execute([$name, $tin ?: null, $address ?: null, $terms ?: null, $active, $id]);
             if (!$q->rowCount()) {
                 $check = $pdo->prepare('SELECT 1 FROM clients WHERE id=?');
                 $check->execute([$id]);
@@ -25,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             log_activity($pdo, 'UPDATE', 'client', $id, 'Updated client ' . $name);
         } else {
-            $pdo->prepare('INSERT INTO clients(client_name,active) VALUES(?,1)')->execute([$name]);
+            $pdo->prepare('INSERT INTO clients(client_name,tin,business_address,payment_terms,active) VALUES(?,?,?,?,1)')
+                ->execute([$name, $tin ?: null, $address ?: null, $terms ?: null]);
             $id = (int)$pdo->lastInsertId();
             log_activity($pdo, 'CREATE', 'client', $id, 'Created client ' . $name);
         }
@@ -46,7 +51,7 @@ $filteredClientCount = (int)$totalClientsQuery->fetchColumn();
 $totalPages = max(1, (int)ceil($filteredClientCount / $pageSize));
 $page = min($requestedPage, $totalPages);
 $offset = ($page - 1) * $pageSize;
-$clientQuery = $pdo->prepare('SELECT c.id,c.client_name,c.active,(SELECT COUNT(*) FROM invoices i WHERE i.customer_id=c.id) invoice_count FROM clients c WHERE c.client_name LIKE ? ORDER BY c.client_name,c.id LIMIT ' . $pageSize . ' OFFSET ' . $offset);
+$clientQuery = $pdo->prepare('SELECT c.id,c.client_name,c.tin,c.business_address,c.payment_terms,c.active,(SELECT COUNT(*) FROM invoices i WHERE i.customer_id=c.id) invoice_count FROM clients c WHERE c.client_name LIKE ? ORDER BY c.client_name,c.id LIMIT ' . $pageSize . ' OFFSET ' . $offset);
 $clientQuery->execute(['%' . $search . '%']);
 $clients = $clientQuery->fetchAll();
 $summary = $pdo->query('SELECT COUNT(*) total, COALESCE(SUM(active=1),0) active FROM clients')->fetch();
@@ -108,7 +113,12 @@ require __DIR__ . '/includes/layout_start.php';
                     <div class="modal-header">
                         <h3 class="modal-title fs-5" id="clientModalTitle">Add Client</h3><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="modal-body"><label class="form-label" for="newClientName">Client Name</label><input class="form-control" id="newClientName" name="client_name" maxlength="180" required></div>
+                    <div class="modal-body">
+                        <label class="form-label" for="newClientName">Client Name</label><input class="form-control" id="newClientName" name="client_name" maxlength="180" required>
+                        <label class="form-label mt-3" for="newClientTin">TIN</label><input class="form-control" id="newClientTin" name="tin" maxlength="40">
+                        <label class="form-label mt-3" for="newClientAddress">Business Address</label><textarea class="form-control" id="newClientAddress" name="business_address" rows="2"></textarea>
+                        <label class="form-label mt-3" for="newClientTerms">Terms</label><input class="form-control" id="newClientTerms" name="payment_terms" maxlength="100">
+                    </div>
                     <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Save Client</button></div>
                 </form>
             </div>
@@ -121,10 +131,16 @@ require __DIR__ . '/includes/layout_start.php';
                         <div class="modal-header">
                             <h3 class="modal-title fs-5" id="editClientTitle<?= (int)$client['id'] ?>">Edit Client</h3><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                        <div class="modal-body"><label class="form-label" for="editName<?= (int)$client['id'] ?>">Client Name</label><input class="form-control" id="editName<?= (int)$client['id'] ?>" name="client_name" maxlength="180" value="<?= e($client['client_name']) ?>" required><label class="form-label mt-3" for="editActive<?= (int)$client['id'] ?>">Status</label><select class="form-select" id="editActive<?= (int)$client['id'] ?>" name="active">
+                        <div class="modal-body">
+                            <label class="form-label" for="editName<?= (int)$client['id'] ?>">Client Name</label><input class="form-control" id="editName<?= (int)$client['id'] ?>" name="client_name" maxlength="180" value="<?= e($client['client_name']) ?>" required>
+                            <label class="form-label mt-3" for="editTin<?= (int)$client['id'] ?>">TIN</label><input class="form-control" id="editTin<?= (int)$client['id'] ?>" name="tin" maxlength="40" value="<?= e($client['tin'] ?? '') ?>">
+                            <label class="form-label mt-3" for="editAddress<?= (int)$client['id'] ?>">Business Address</label><textarea class="form-control" id="editAddress<?= (int)$client['id'] ?>" name="business_address" rows="2"><?= e($client['business_address'] ?? '') ?></textarea>
+                            <label class="form-label mt-3" for="editTerms<?= (int)$client['id'] ?>">Terms</label><input class="form-control" id="editTerms<?= (int)$client['id'] ?>" name="payment_terms" maxlength="100" value="<?= e($client['payment_terms'] ?? '') ?>">
+                            <label class="form-label mt-3" for="editActive<?= (int)$client['id'] ?>">Status</label><select class="form-select" id="editActive<?= (int)$client['id'] ?>" name="active">
                                 <option value="1" <?= $client['active'] ? 'selected' : '' ?>>Active</option>
                                 <option value="0" <?= !$client['active'] ? 'selected' : '' ?>>Inactive</option>
-                            </select></div>
+                            </select>
+                        </div>
                         <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Save Client</button></div>
                     </form>
                 </div>
@@ -138,7 +154,10 @@ require __DIR__ . '/includes/layout_start.php';
                 let detailRequest = 0;
                 let lastDetailRequest = null;
 
-                const formatPeso = value => '₱' + Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const formatPeso = value => '₱' + Number(value).toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
                 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
                     '&': '&amp;',
                     '<': '&lt;',
@@ -188,6 +207,7 @@ require __DIR__ . '/includes/layout_start.php';
             <td>${escapeHtml(invoice.item_count)}</td><td>${escapeHtml(Number(invoice.total_quantity || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 }))}</td>
             <td>${invoice.invoice_amount === null ? '—' : escapeHtml(formatPeso(invoice.invoice_amount))}</td>
             <td><span class="badge ${invoice.status === 'Invoiced' ? 'text-bg-success' : 'text-bg-secondary'}">${escapeHtml(invoice.status)}</span></td>
+            <td>${invoice.invoice_number && Number(invoice.item_count) > 0 ? `<a class="btn btn-sm btn-outline-primary" href="invoice_print.php?invoice_id=${Number(invoice.id)}">Print</a>` : '<span class="text-secondary">Not printable</span>'}</td>
         </tr>`).join('');
                     const first = (data.page - 1) * 10 + 1;
                     const last = Math.min(data.page * 10, data.total);
@@ -195,7 +215,7 @@ require __DIR__ . '/includes/layout_start.php';
                     for (let p = Math.max(1, data.page - 2); p <= Math.min(data.pages, data.page + 2); p++) {
                         pageButtons += `<button type="button" class="btn btn-sm ${p === data.page ? 'btn-primary' : 'btn-outline-secondary'}" data-page="${p}" ${p === data.page ? 'aria-current="page"' : ''}>${p}</button>`;
                     }
-                    box.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Invoice No.</th><th>Invoice Date</th><th>Withdrawal No.</th><th>Items</th><th>Total Quantity</th><th>Invoice Amount (PHP)</th><th>Status</th></tr></thead><tbody>${historyRows}</tbody></table></div>
+                    box.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Invoice No.</th><th>Invoice Date</th><th>Withdrawal No.</th><th>Items</th><th>Total Quantity</th><th>Invoice Amount (PHP)</th><th>Status</th><th>Action</th></tr></thead><tbody>${historyRows}</tbody></table></div>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><span class="small text-secondary">Showing ${first}–${last} of ${data.total} invoices</span>
             <div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-secondary" data-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>Previous</button>${pageButtons}<button type="button" class="btn btn-sm btn-outline-secondary" data-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Next</button></div></div>`;
                     box.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => loadHistory(panel, Number(button.dataset.page))));
@@ -231,7 +251,10 @@ require __DIR__ . '/includes/layout_start.php';
                         detailTitle.textContent = 'Invoice ' + (invoice.invoice_number || 'Details');
                         const lines = invoice.lines.map((line, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(line.item_code || '—')}</td><td>${escapeHtml(line.product_name)}</td><td>${escapeHtml(line.description || '—')}</td><td>${escapeHtml(line.site_name || '—')}</td><td class="text-end">${escapeHtml(Number(line.quantity).toLocaleString('en-PH', { maximumFractionDigits: 0 }))}</td><td>${escapeHtml(line.u_m || '—')}</td><td class="text-end">${escapeHtml(formatPeso(line.price_each))}</td><td>${escapeHtml(line.tax_code || '—')}</td><td class="text-end">${escapeHtml(formatPeso(line.amount))}</td></tr>`).join('');
                         const lineTable = lines ? `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Line</th><th>Product Code</th><th>Product</th><th>Description</th><th>Site</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Unit Price (PHP)</th><th>Tax Code</th><th class="text-end">Line Total (PHP)</th></tr></thead><tbody>${lines}</tbody></table></div>` : '<p class="text-secondary mb-0">No invoice product rows were saved for this invoice.</p>';
-                        detailBody.innerHTML = `<dl class="row mb-4"><dt class="col-sm-3">Invoice Number</dt><dd class="col-sm-9">${escapeHtml(invoice.invoice_number || '—')}</dd><dt class="col-sm-3">Invoice Date</dt><dd class="col-sm-9">${escapeHtml(invoice.invoice_date)}</dd><dt class="col-sm-3">Client</dt><dd class="col-sm-9">${escapeHtml(invoice.client_name)}</dd><dt class="col-sm-3">Withdrawal</dt><dd class="col-sm-9">${escapeHtml(invoice.withdrawal_no)}</dd><dt class="col-sm-3">Status</dt><dd class="col-sm-9">${escapeHtml(invoice.status)}</dd>${invoice.po_no ? `<dt class="col-sm-3">PO No.</dt><dd class="col-sm-9">${escapeHtml(invoice.po_no)}</dd>` : ''}</dl>${lineTable}<div class="d-flex justify-content-end border-top pt-3 mt-3"><strong>Invoice Total: ${escapeHtml(formatPeso(invoice.subtotal))}</strong></div>`;
+                        const printAction = invoice.invoice_number && invoice.lines.length ?
+                            `<a class="btn btn-primary" href="invoice_print.php?invoice_id=${Number(invoice.id)}">Print / Save PDF</a>` :
+                            '<span class="text-secondary">Not printable</span>';
+                        detailBody.innerHTML = `<dl class="row mb-4"><dt class="col-sm-3">Invoice Number</dt><dd class="col-sm-9">${escapeHtml(invoice.invoice_number || '—')}</dd><dt class="col-sm-3">Invoice Date</dt><dd class="col-sm-9">${escapeHtml(invoice.invoice_date)}</dd><dt class="col-sm-3">Client</dt><dd class="col-sm-9">${escapeHtml(invoice.client_name || 'Not recorded on this invoice')}</dd><dt class="col-sm-3">Withdrawal</dt><dd class="col-sm-9">${escapeHtml(invoice.withdrawal_no)}</dd><dt class="col-sm-3">Status</dt><dd class="col-sm-9">${escapeHtml(invoice.status)}</dd>${invoice.po_no ? `<dt class="col-sm-3">PO No.</dt><dd class="col-sm-9">${escapeHtml(invoice.po_no)}</dd>` : ''}</dl>${lineTable}<div class="d-flex justify-content-between align-items-center border-top pt-3 mt-3"><strong>Invoice Total: ${escapeHtml(formatPeso(invoice.total_due))}</strong>${printAction}</div>`;
                     } catch (error) {
                         if (requestId !== detailRequest) return;
                         detailBody.innerHTML = '<div class="alert alert-danger mb-0">Unable to load invoice details. <button type="button" class="btn btn-sm btn-outline-danger ms-2" data-detail-retry>Retry</button></div>';

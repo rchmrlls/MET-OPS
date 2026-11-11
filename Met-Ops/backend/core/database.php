@@ -6,7 +6,7 @@ function db(): PDO
     static $pdo = null;
     if ($pdo instanceof PDO) return $pdo;
     $host = getenv('WQ_DB_HOST') ?: '127.0.0.1';
-    $name = getenv('WQ_DB_NAME') ?: 'withdrawal_qb';
+    $name = getenv('WQ_DB_NAME') ?: 'metfood_qb';
     $user = getenv('WQ_DB_USER') ?: 'root';
     $pass = getenv('WQ_DB_PASS') ?: '';
     $dsn = "mysql:host={$host};dbname={$name};charset=utf8mb4";

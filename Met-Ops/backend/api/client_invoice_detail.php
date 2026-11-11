@@ -14,7 +14,7 @@ if (!$invoiceId || !$clientId) {
 
 try {
     $pdo = db();
-    $header = $pdo->prepare('SELECT i.id,i.invoice_number,i.invoice_date,i.po_no,i.status,c.client_name,w.withdrawal_no FROM invoices i JOIN clients c ON c.id=i.customer_id JOIN withdrawals w ON w.id=i.withdrawal_id WHERE i.id=? AND i.customer_id=? LIMIT 1');
+    $header = $pdo->prepare('SELECT i.id,i.invoice_number,i.invoice_date,i.po_no,i.status,i.print_total_due,i.customer_name_snapshot AS client_name,w.withdrawal_no FROM invoices i JOIN withdrawals w ON w.id=i.withdrawal_id WHERE i.id=? AND i.customer_id=? LIMIT 1');
     $header->execute([$invoiceId, $clientId]);
     $invoice = $header->fetch(PDO::FETCH_ASSOC);
     if (!$invoice) {
@@ -27,8 +27,8 @@ try {
     $linesQuery->execute([$invoiceId]);
     $lines = $linesQuery->fetchAll(PDO::FETCH_ASSOC);
     $invoice['lines'] = $lines;
-    // Invoice Preparation calculates its displayed total as the sum of saved line amounts.
-    $invoice['subtotal'] = array_reduce($lines, static fn(float $sum, array $line): float => $sum + (float)$line['amount'], 0.0);
+    $lineTotal = array_reduce($lines, static fn(float $sum, array $line): float => $sum + (float)$line['amount'], 0.0);
+    $invoice['total_due'] = $invoice['print_total_due'] !== null ? (float) $invoice['print_total_due'] : $lineTotal;
     echo json_encode($invoice, JSON_THROW_ON_ERROR);
 } catch (Throwable $e) {
     error_log('Client invoice detail request failed: ' . $e->getMessage());

@@ -6,6 +6,7 @@
         <a class="nav-link <?= nav_active('withdrawals.php') ?>" href="withdrawals.php"><i class="bi bi-inboxes-fill nav-icon" aria-hidden="true"></i>Withdrawal Register</a>
         <a class="nav-link <?= nav_active('withdrawal_form.php') ?>" href="withdrawal_form.php"><i class="bi bi-plus-square-fill nav-icon" aria-hidden="true"></i>Withdrawal Form</a>
         <a class="nav-link <?= nav_active('invoice_preparation.php') ?>" href="invoice_preparation.php"><i class="bi bi-receipt-cutoff nav-icon" aria-hidden="true"></i>Invoice Preparation</a>
+        <a class="nav-link <?= nav_active('invoices.php') ?>" href="invoices.php"><i class="bi bi-printer nav-icon" aria-hidden="true"></i>Invoice Archive</a>
         <a class="nav-link <?= nav_active('sales_order_preparation.php') ?>" href="sales_order_preparation.php"><i class="bi bi-file-earmark-text nav-icon" aria-hidden="true"></i>Sales Order Preparation</a>
         <a class="nav-link <?= nav_active('quickbooks_status.php') ?>" href="quickbooks_status.php"><i class="bi bi-arrow-repeat nav-icon" aria-hidden="true"></i>QuickBooks Status</a>
     </nav>

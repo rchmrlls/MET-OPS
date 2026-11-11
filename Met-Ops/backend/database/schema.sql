@@ -1,11 +1,11 @@
-CREATE DATABASE IF NOT EXISTS withdrawal_qb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE withdrawal_qb;
+CREATE DATABASE IF NOT EXISTS metfood_qb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE metfood_qb;
 CREATE TABLE IF NOT EXISTS employees (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(150) NOT NULL, username VARCHAR(80) NOT NULL UNIQUE,
  password_hash VARCHAR(255) NOT NULL, role ENUM('Admin','Employee') NOT NULL DEFAULT 'Employee', active TINYINT(1) NOT NULL DEFAULT 1,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS clients (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_name VARCHAR(180) NOT NULL UNIQUE, qb_list_id VARCHAR(100) NULL, active TINYINT(1) NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS clients (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_name VARCHAR(180) NOT NULL UNIQUE, qb_list_id VARCHAR(100) NULL, tin VARCHAR(40) NULL, business_address TEXT NULL, payment_terms VARCHAR(100) NULL, active TINYINT(1) NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS sites (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, site_name VARCHAR(120) NOT NULL UNIQUE, active TINYINT(1) NOT NULL DEFAULT 1) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS employee_permissions (
  employee_id BIGINT UNSIGNED NOT NULL, permission_code VARCHAR(80) NOT NULL, granted_by BIGINT UNSIGNED NULL,
@@ -38,9 +38,10 @@ CREATE TABLE IF NOT EXISTS withdrawal_items (
  CONSTRAINT fk_wi_product FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS invoices (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, withdrawal_id BIGINT UNSIGNED NOT NULL UNIQUE, customer_id BIGINT UNSIGNED NOT NULL, invoice_number VARCHAR(100) NULL, invoice_date DATE NOT NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, withdrawal_id BIGINT UNSIGNED NOT NULL UNIQUE, customer_id BIGINT UNSIGNED NOT NULL, customer_name_snapshot VARCHAR(180) NULL, customer_tin_snapshot VARCHAR(40) NULL, customer_address_snapshot TEXT NULL, customer_terms_snapshot VARCHAR(100) NULL, invoice_number VARCHAR(100) NULL, invoice_date DATE NOT NULL,
  po_no VARCHAR(100) NULL, memo TEXT NULL, status ENUM('Draft','Ready','Queued','Processing','Invoiced','Error','Uncertain Result') NOT NULL DEFAULT 'Draft',
  qb_invoice_no VARCHAR(100) NULL, qb_txn_id VARCHAR(100) NULL, submitted_by BIGINT UNSIGNED NULL, submitted_at DATETIME NULL,
+ print_vat_mode VARCHAR(20) NULL, print_discount_name VARCHAR(80) NULL, print_ewt_mode VARCHAR(20) NULL, print_subtotal DECIMAL(14,2) NULL, print_discount_amount DECIMAL(14,2) NULL, print_regular_sales DECIMAL(14,2) NULL, print_vat_amount DECIMAL(14,2) NULL, print_zero_rated_sales DECIMAL(14,2) NULL, print_non_vat_sales DECIMAL(14,2) NULL, print_withholding_amount DECIMAL(14,2) NULL, print_total_due DECIMAL(14,2) NULL,
  created_by BIGINT UNSIGNED NULL, updated_by BIGINT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
  UNIQUE KEY uq_invoices_invoice_number(invoice_number),
  CONSTRAINT fk_invoice_withdrawal FOREIGN KEY(withdrawal_id) REFERENCES withdrawals(id), CONSTRAINT fk_invoice_customer FOREIGN KEY(customer_id) REFERENCES clients(id),
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, invoice_id BIGINT UNSIGNED NOT NULL, withdrawal_item_id BIGINT UNSIGNED NULL, source_type ENUM('WITHDRAWAL','ADDITIONAL') NOT NULL DEFAULT 'WITHDRAWAL',
  product_id BIGINT UNSIGNED NULL, site_id BIGINT UNSIGNED NULL, product_name VARCHAR(255) NOT NULL, quantity BIGINT UNSIGNED NOT NULL,
  lot_number VARCHAR(100) NULL, item_code VARCHAR(100) NULL, description VARCHAR(255) NULL, u_m VARCHAR(40) NULL, price_each DECIMAL(12,2) NOT NULL DEFAULT 0,
- amount DECIMAL(14,2) NOT NULL DEFAULT 0, tax_code VARCHAR(40) NOT NULL DEFAULT 'Non', expiration_date DATE NULL,
+ amount DECIMAL(14,2) NOT NULL DEFAULT 0, tax_code VARCHAR(40) NOT NULL DEFAULT 'Non', print_type VARCHAR(20) NULL, expiration_date DATE NULL,
  created_by BIGINT UNSIGNED NULL, updated_by BIGINT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
  INDEX idx_invoice_items_invoice(invoice_id), CONSTRAINT fk_ii_invoice FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
  CONSTRAINT fk_ii_wi FOREIGN KEY(withdrawal_item_id) REFERENCES withdrawal_items(id) ON DELETE SET NULL,

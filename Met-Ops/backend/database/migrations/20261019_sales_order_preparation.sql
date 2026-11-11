@@ -1,5 +1,5 @@
 -- Add a separate local Sales Order preparation workflow without changing invoices.
--- Run once against withdrawal_qb after backing up the database.
+-- Run once against metfood_qb after backing up the database.
 CREATE TABLE IF NOT EXISTS sales_orders (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     withdrawal_id BIGINT UNSIGNED NOT NULL UNIQUE,

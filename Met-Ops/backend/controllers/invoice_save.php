@@ -24,8 +24,11 @@ try {
     $invoiceNumber = is_string($_POST['invoice_number'] ?? null) ? trim($_POST['invoice_number']) : '';
     if ($invoiceNumber === '' || mb_strlen($invoiceNumber) > 100) throw new RuntimeException('Invoice Number is required and must be 100 characters or fewer.');
     $customerId = filter_var($_POST['customer_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-    $cs = $pdo->prepare('SELECT id FROM clients WHERE id=? AND active=1'); $cs->execute([$customerId ?: 0]);
-    if (!$cs->fetchColumn()) throw new RuntimeException('Select an active customer for this invoice.');
+    $cs = $pdo->prepare('SELECT id,client_name,tin,business_address,payment_terms FROM clients WHERE id=? AND active=1');
+    $cs->execute([$customerId ?: 0]);
+    $customer = $cs->fetch();
+    if (!$customer) throw new RuntimeException('Select an active customer for this invoice.');
+    $customerSnapshot = invoice_print_customer_snapshot($inv, $customer, (int) $customerId);
     $dupe = $pdo->prepare('SELECT id FROM invoices WHERE invoice_number=? AND id<>?'); $dupe->execute([$invoiceNumber, $invoiceId]);
     if ($dupe->fetchColumn()) throw new RuntimeException('That invoice number is already used by another invoice.');
     $date = trim((string)($_POST['invoice_date'] ?? ''));
@@ -38,6 +41,18 @@ try {
         $memo = trim($_POST['memo']);
         if (strlen($memo) > 65535) throw new RuntimeException('Memo is too long.');
         if ($memo === '') $memo = null;
+    }
+    $vatMode = is_string($_POST['print_vat_mode'] ?? null) ? trim($_POST['print_vat_mode']) : '';
+    $ewtMode = is_string($_POST['print_ewt_mode'] ?? null) ? trim($_POST['print_ewt_mode']) : '';
+    $discountName = is_string($_POST['print_discount_name'] ?? null) ? trim($_POST['print_discount_name']) : '';
+    if (!in_array($vatMode, ['Regular', 'Non-VAT', 'Zero Rated', 'Discount'], true)) {
+        throw new RuntimeException('Select an invoice VAT treatment.');
+    }
+    if (!in_array($ewtMode, ['NO EWT', '1% EWT'], true)) {
+        throw new RuntimeException('Select a withholding tax treatment.');
+    }
+    if ($discountName !== '' && !array_key_exists($discountName, invoice_print_discount_options())) {
+        throw new RuntimeException('Select a valid invoice discount.');
     }
     $raw = $_POST['items'] ?? [];
     if (!is_array($raw)) throw new RuntimeException('Invoice lines are invalid.');
@@ -68,6 +83,8 @@ try {
         $sites->execute([$siteId ?: 0]); if (!$sites->fetchColumn()) throw new RuntimeException('Select an active SITE for every line.');
         $tax = (string)($it['tax_code'] ?? '');
         if (!in_array($tax, ['Non', 'Tax', 'Exempt'], true)) throw new RuntimeException('Select a valid TAX value.');
+        $printType = (string)($it['print_type'] ?? '');
+        if (!in_array($printType, ['Regular', 'Non-Vat'], true)) throw new RuntimeException('Select a valid PRINT TYPE for every invoice line.');
         $expiry = trim((string)($it['expiration_date'] ?? ''));
         if ($expiry !== '' && !$validDate($expiry)) throw new RuntimeException('Enter a valid EXPIRATION DATE or leave it blank.');
         $qty = (int)$qtyRaw; $price = (float)$priceRaw;
@@ -79,16 +96,60 @@ try {
             if ($sourceProductId === false || ($sourceProductId !== null && (int)$sourceProductId !== (int)$product['id'])) throw new RuntimeException('A source invoice line no longer matches this withdrawal product.');
         }
         if (mb_strlen($it['lot_number'] ?? '') > 100 || mb_strlen($it['item_code'] ?? '') > 100 || mb_strlen($it['description'] ?? '') > 255 || mb_strlen($it['u_m'] ?? '') > 40) throw new RuntimeException('A line value exceeds its allowed length.');
-        $valid[] = ['product'=>$product,'site'=>$siteId,'qty'=>$qty,'price'=>$price,'tax'=>$tax,'expiry'=>$expiry ?: null,'lot'=>trim((string)($it['lot_number'] ?? '')),'code'=>trim((string)($it['item_code'] ?? '')),'desc'=>trim((string)($it['description'] ?? '')),'um'=>trim((string)($it['u_m'] ?? '')),'source'=>$source,'wi'=>$source === 'WITHDRAWAL' && $wi ? $wi : null];
+        $valid[] = ['product'=>$product,'site'=>$siteId,'qty'=>$qty,'price'=>$price,'tax'=>$tax,'print_type'=>$printType,'expiry'=>$expiry ?: null,'lot'=>trim((string)($it['lot_number'] ?? '')),'code'=>trim((string)($it['item_code'] ?? '')),'desc'=>trim((string)($it['description'] ?? '')),'um'=>trim((string)($it['u_m'] ?? '')),'source'=>$source,'wi'=>$source === 'WITHDRAWAL' && $wi ? $wi : null];
     }
     if (!$valid) throw new RuntimeException('Add at least one valid invoice line.');
-    $pdo->prepare('UPDATE invoices SET customer_id=?,invoice_number=?,invoice_date=?,po_no=?,memo=?,status="Draft",updated_by=? WHERE id=?')->execute([$customerId,$invoiceNumber,$date,$po ?: null,$memo,$_SESSION['user']['id'],$invoiceId]);
+    $calculationItems = [];
+    foreach ($valid as $line) {
+        $amount = round($line['qty'] * $line['price'], 2, PHP_ROUND_HALF_UP);
+        $calculationItems[] = [
+            'amount' => number_format($amount, 2, '.', ''),
+            'print_type' => $line['print_type'],
+        ];
+    }
+    $totals = calculate_invoice_print_totals(
+        $calculationItems,
+        $vatMode,
+        $discountName !== '' ? $discountName : null,
+        $ewtMode
+    );
+    $pdo->prepare(
+        'UPDATE invoices SET customer_id=?,customer_name_snapshot=?,customer_tin_snapshot=?,
+         customer_address_snapshot=?,customer_terms_snapshot=?,invoice_number=?,invoice_date=?,
+         po_no=?,memo=?,print_vat_mode=?,print_discount_name=?,print_ewt_mode=?,print_subtotal=?,
+         print_discount_amount=?,print_regular_sales=?,print_vat_amount=?,print_zero_rated_sales=?,
+         print_non_vat_sales=?,print_withholding_amount=?,print_total_due=?,status="Draft",updated_by=?
+         WHERE id=?'
+    )->execute([
+        $customerId,
+        $customerSnapshot['customer_name_snapshot'],
+        $customerSnapshot['customer_tin_snapshot'],
+        $customerSnapshot['customer_address_snapshot'],
+        $customerSnapshot['customer_terms_snapshot'],
+        $invoiceNumber,
+        $date,
+        $po ?: null,
+        $memo,
+        $vatMode,
+        $discountName !== '' ? $discountName : null,
+        $ewtMode,
+        $totals['subtotal'],
+        $totals['discount_amount'],
+        $totals['regular_sales'],
+        $totals['vat_amount'],
+        $totals['zero_rated_sales'],
+        $totals['non_vat_sales'],
+        $totals['withholding_amount'],
+        $totals['total_due'],
+        $_SESSION['user']['id'],
+        $invoiceId
+    ]);
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invoiceId]);
-    $ins = $pdo->prepare('INSERT INTO invoice_items(invoice_id,withdrawal_item_id,source_type,product_id,site_id,product_name,quantity,lot_number,item_code,description,u_m,price_each,amount,tax_code,expiration_date,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins = $pdo->prepare('INSERT INTO invoice_items(invoice_id,withdrawal_item_id,source_type,product_id,site_id,product_name,quantity,lot_number,item_code,description,u_m,price_each,amount,tax_code,print_type,expiration_date,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($valid as $line) {
         $p = $line['product'];
         $amount = round($line['qty'] * $line['price'], 2, PHP_ROUND_HALF_UP);
-        $ins->execute([$invoiceId,$line['wi'],$line['source'],$p['id'],$line['site'],$p['product_name'],$line['qty'],$line['lot'] ?: null,$p['qb_code'], $p['qb_description'],$p['u_m'],$line['price'],$amount,$line['tax'],$line['expiry'],$_SESSION['user']['id'],$_SESSION['user']['id']]);
+        $ins->execute([$invoiceId,$line['wi'],$line['source'],$p['id'],$line['site'],$p['product_name'],$line['qty'],$line['lot'] ?: null,$p['qb_code'], $p['qb_description'],$p['u_m'],$line['price'],$amount,$line['tax'],$line['print_type'],$line['expiry'],$_SESSION['user']['id'],$_SESSION['user']['id']]);
     }
     log_activity($pdo,'SAVE_DRAFT','invoice',$invoiceId,'Saved invoice draft for '.$no.' with '.count($valid).' line(s)');
     $pdo->commit(); flash('success','Invoice draft saved. The source withdrawal was not changed.');

@@ -8,7 +8,7 @@ $pdo = db();
 $no = trim($_GET['withdrawal_no'] ?? '');
 
 $s = $pdo->prepare(
-    'SELECT w.*, c.client_name
+    'SELECT w.*, c.client_name, c.tin, c.business_address, c.payment_terms
      FROM withdrawals w
      JOIN clients c ON c.id = w.client_id
      WHERE w.withdrawal_no = ?'
@@ -32,13 +32,19 @@ if (!$inv) {
 
     $s = $pdo->prepare(
         'INSERT INTO invoices
-         (withdrawal_id, customer_id, invoice_date, po_no, status, created_by, updated_by)
-         VALUES (?, ?, ?, ?, "Draft", ?, ?)'
+         (withdrawal_id, customer_id, customer_name_snapshot, customer_tin_snapshot,
+          customer_address_snapshot, customer_terms_snapshot, invoice_date, po_no,
+          status, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, "Draft", ?, ?)'
     );
 
     $s->execute([
         $w['id'],
         $w['client_id'],
+        $w['client_name'],
+        $w['tin'],
+        $w['business_address'],
+        $w['payment_terms'],
         $w['form_date'],
         $w['po_no'],
         $_SESSION['user']['id'],
@@ -116,6 +122,7 @@ $products = get_products($pdo);
 $products = array_values(array_filter($products, static fn($p) => trim((string)($p['qb_code'] ?? '')) !== ''));
 $customers = $pdo->query('SELECT id,client_name,qb_list_id FROM clients WHERE active=1 ORDER BY client_name')->fetchAll();
 $sites = get_sites($pdo);
+$discountOptions = invoice_print_discount_options();
 $locked = in_array($inv['status'], ['Invoiced', 'Queued', 'Processing', 'Uncertain Result'], true);
 
 $sum = 0;
@@ -134,6 +141,12 @@ foreach ($lines as $ln) {
     </div>
 
     <div class="toolbar">
+        <?php if (!empty($inv['invoice_number'])): ?>
+            <a href="invoice_print.php?invoice_id=<?= (int) $inv['id'] ?>" class="btn btn-outline-primary">
+                <i class="bi bi-printer" aria-hidden="true"></i>
+                View saved print
+            </a>
+        <?php endif; ?>
         <a href="withdrawals.php" class="btn btn-light">
             <i class="bi bi-arrow-left" aria-hidden="true"></i>
             Select withdrawal
@@ -219,6 +232,34 @@ foreach ($lines as $ln) {
                         rows="1"
                         <?= $locked ? 'readonly' : '' ?>><?= e($inv['memo'] ?? '') ?></textarea>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="printVatMode">Invoice VAT treatment <span class="required-mark">*</span></label>
+                    <select class="form-select" id="printVatMode" name="print_vat_mode" required <?= $locked ? 'disabled' : '' ?>>
+                        <option value="">Select VAT treatment</option>
+                        <?php foreach (['Regular', 'Non-VAT', 'Zero Rated', 'Discount'] as $vatMode): ?>
+                            <option value="<?= e($vatMode) ?>" <?= $vatMode === 'Discount' ? 'disabled' : '' ?> <?= ($inv['print_vat_mode'] ?? '') === $vatMode ? 'selected' : '' ?>><?= e($vatMode) ?><?= $vatMode === 'Discount' ? ' — unavailable pending business rule' : '' ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="printDiscount">Discount</label>
+                    <select class="form-select" id="printDiscount" name="print_discount_name" <?= $locked ? 'disabled' : '' ?>>
+                        <option value="">No discount</option>
+                        <?php foreach ($discountOptions as $discountName => $discountRate): ?>
+                            <option value="<?= e($discountName) ?>" disabled <?= ($inv['print_discount_name'] ?? '') === $discountName ? 'selected' : '' ?>><?= e($discountName) ?> — unavailable pending business rule</option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Discount options are disabled because the workbook produces formula errors or conflicting totals for these scenarios. No discount is currently supported.</div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="printEwtMode">Withholding tax <span class="required-mark">*</span></label>
+                    <select class="form-select" id="printEwtMode" name="print_ewt_mode" required <?= $locked ? 'disabled' : '' ?>>
+                        <option value="">Select withholding treatment</option>
+                        <?php foreach (['NO EWT', '1% EWT'] as $ewtMode): ?>
+                            <option value="<?= e($ewtMode) ?>" <?= ($inv['print_ewt_mode'] ?? '') === $ewtMode ? 'selected' : '' ?>><?= e($ewtMode) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
         </div>
     </section>
@@ -256,6 +297,7 @@ foreach ($lines as $ln) {
                     <col class="invoice-col-amount">
                     <col class="invoice-col-expiration">
                     <col class="invoice-col-tax">
+                    <col class="invoice-col-print-type">
                 </colgroup>
                 <thead>
                     <tr>
@@ -269,6 +311,7 @@ foreach ($lines as $ln) {
                         <th>AMOUNT (PHP)</th>
                         <th>EXPIRATION DATE</th>
                         <th>TAX</th>
+                        <th>PRINT TYPE</th>
                     </tr>
                 </thead>
 
@@ -365,6 +408,14 @@ foreach ($lines as $ln) {
                                     <?php endforeach; ?>
                                 </select>
                             </td>
+                            <td>
+                                <select class="form-select table-input" name="items[<?= $i ?>][print_type]" required <?= $locked ? 'disabled' : '' ?>>
+                                    <option value="">Select type</option>
+                                    <?php foreach (['Regular', 'Non-Vat'] as $printType): ?>
+                                        <option value="<?= e($printType) ?>" <?= ($ln['print_type'] ?? 'Regular') === $printType ? 'selected' : '' ?>><?= e($printType) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </td>
 
                         </tr>
                     <?php endforeach; ?>
@@ -439,6 +490,8 @@ foreach ($lines as $ln) {
                 else if (el.name.endsWith('[price_each]')) el.value = '0.00';
             });
             row.querySelector("input[name$='[source_type]']").value = 'ADDITIONAL';
+            const printType = row.querySelector("select[name$='[print_type]']");
+            if (printType) printType.value = 'Regular';
             tbody.appendChild(row);
         });
         tbody.addEventListener('click', event => {

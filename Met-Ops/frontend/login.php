@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card shadow-sm">
             <div class="card-body p-4">
                 <h1 class="h3">Withdrawal & Invoicing</h1>
-                <p class="text-secondary">Sign in to your local office system.</p>
+                <p class="text-secondary">Sign in to MET OPS</p>
                 <?php if ($error): ?>
                     <div class="alert alert-danger"><?= e($error) ?></div>
                 <?php endif; ?>

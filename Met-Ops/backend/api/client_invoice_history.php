@@ -25,7 +25,8 @@ try {
     $offset = ($page - 1) * $perPage;
     $query = $pdo->prepare("SELECT i.id, i.invoice_number, i.invoice_date, i.status,
             w.withdrawal_no, COALESCE(invoice_totals.item_count,0) AS item_count,
-            COALESCE(invoice_totals.total_quantity,0) AS total_quantity, invoice_totals.invoice_amount
+            COALESCE(invoice_totals.total_quantity,0) AS total_quantity,
+            COALESCE(i.print_total_due,invoice_totals.invoice_amount) AS invoice_amount
         FROM invoices i
         INNER JOIN withdrawals w ON w.id=i.withdrawal_id
         LEFT JOIN (

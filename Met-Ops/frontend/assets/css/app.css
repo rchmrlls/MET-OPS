@@ -1636,6 +1636,7 @@ textarea:focus-visible {
 #invoiceLines .invoice-col-amount { width: 130px; }
 #invoiceLines .invoice-col-expiration { width: 115px; }
 #invoiceLines .invoice-col-tax { width: 68px; }
+#invoiceLines .invoice-col-print-type { width: 105px; }
 
 .sales-order-table-wrap { max-width: 100%; }
 .sales-order-lines-table { min-width: 1850px; table-layout: fixed; }
