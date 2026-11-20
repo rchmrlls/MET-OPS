@@ -8,7 +8,9 @@
         <a class="nav-link <?= nav_active('invoice_preparation.php') ?>" href="invoice_preparation.php"><i class="bi bi-receipt-cutoff nav-icon" aria-hidden="true"></i>Invoice Preparation</a>
         <a class="nav-link <?= nav_active('invoices.php') ?>" href="invoices.php"><i class="bi bi-printer nav-icon" aria-hidden="true"></i>Invoice Archive</a>
         <a class="nav-link <?= nav_active('sales_order_preparation.php') ?>" href="sales_order_preparation.php"><i class="bi bi-file-earmark-text nav-icon" aria-hidden="true"></i>Sales Order Preparation</a>
+        <!-- QuickBooks status navigation is temporarily disabled.
         <a class="nav-link <?= nav_active('quickbooks_status.php') ?>" href="quickbooks_status.php"><i class="bi bi-arrow-repeat nav-icon" aria-hidden="true"></i>QuickBooks Status</a>
+        -->
     </nav>
     <div class="nav-label nav-label-spaced">SETUP</div>
     <nav class="nav flex-column app-nav" aria-label="Setup">
@@ -16,8 +18,10 @@
         <?php if(can_manage_products_sites() || (($_SESSION['user']['role'] ?? '') === 'Employee')): ?><a class="nav-link <?= nav_active('products_sites.php') ?>" href="products_sites.php"><i class="bi bi-box-seam-fill nav-icon" aria-hidden="true"></i>Products &amp; Sites</a><?php endif; ?>
         <a class="nav-link <?= nav_active('settings.php') ?>" href="settings.php"><i class="bi bi-gear-fill nav-icon" aria-hidden="true"></i>Settings</a>
     </nav>
+    <!-- QuickBooks connection indicator is temporarily disabled.
     <div class="sidebar-bottom">
         <div class="connection-dot"></div><span>QuickBooks connection</span><strong>Integration test pending</strong><small>MySQL backend enabled</small>
     </div>
+    -->
 </aside>
 <button class="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1"></button>

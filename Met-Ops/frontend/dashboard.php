@@ -8,7 +8,9 @@ foreach (['Draft', 'Ready for Invoicing', 'Invoice Preparation', 'Invoiced'] as 
     $s->execute([$st]);
     $stats[$st] = (int)$s->fetchColumn();
 }
+/* QuickBooks queue indicator temporarily disabled.
 $queue = (int)$pdo->query("SELECT COUNT(*) FROM qb_jobs WHERE status IN ('Queued','Processing')")->fetchColumn();
+*/
 $recent = $pdo->query('SELECT w.withdrawal_no,w.form_date,w.status,c.client_name,COUNT(wi.id) item_count FROM withdrawals w JOIN clients c ON c.id=w.client_id LEFT JOIN withdrawal_items wi ON wi.withdrawal_id=w.id GROUP BY w.id ORDER BY w.id DESC LIMIT 6')->fetchAll(); ?>
 <div class="page-intro">
     <div>
@@ -28,11 +30,13 @@ $recent = $pdo->query('SELECT w.withdrawal_no,w.form_date,w.status,c.client_name
         <div class="stat-value"><?= number_format($stats['Ready for Invoicing']) ?></div>
         <div class="stat-note">Available to invoice</div>
     </div>
+    <?php if (false): // QuickBooks processing card temporarily disabled; retained for later reactivation. ?>
     <div class="stat-card">
         <div class="stat-top"><span>Invoices Processing</span><i class="bi bi-arrow-repeat stat-icon" aria-hidden="true"></i></div>
         <div class="stat-value"><?= number_format($queue) ?></div>
         <div class="stat-note">Queue count</div>
     </div>
+    <?php endif; ?>
     <div class="stat-card">
         <div class="stat-top"><span>Invoiced Withdrawals</span><i class="bi bi-check2-circle stat-icon" aria-hidden="true"></i></div>
         <div class="stat-value"><?= number_format($stats['Invoiced']) ?></div>

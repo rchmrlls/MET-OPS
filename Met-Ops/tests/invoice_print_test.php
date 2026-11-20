@@ -47,6 +47,61 @@ expect_invoice_value('445.71', $regularMixed['vat_amount'], 'Mixed regular VAT')
 expect_invoice_value('19680.00', $regularMixed['non_vat_sales'], 'Mixed non-VAT sales');
 expect_invoice_value('23840.00', $regularMixed['total_due'], 'Mixed regular total due');
 
+// The saved invoice-line Tax selection takes precedence over PRINT TYPE.
+$taxColumnMixedItems = [
+    ['amount' => '1000.00', 'tax_code' => 'Tax', 'print_type' => 'Non-Vat'],
+    ['amount' => '2000.00', 'tax_code' => 'Non', 'print_type' => 'Regular'],
+    ['amount' => '500.00', 'tax_code' => 'Tax', 'print_type' => 'Non-Vat'],
+    ['amount' => '750.00', 'tax_code' => 'Exempt', 'print_type' => 'Regular'],
+];
+$taxColumnMixed = calculate_invoice_print_totals($taxColumnMixedItems, 'Regular', null, 'NO EWT');
+expect_invoice_value('4250.00', $taxColumnMixed['subtotal'], 'Tax-column mixed subtotal');
+expect_invoice_value('1339.29', $taxColumnMixed['regular_sales'], 'Tax-column taxable sales');
+expect_invoice_value('160.71', $taxColumnMixed['vat_amount'], 'Tax-column mixed VAT');
+expect_invoice_value('2750.00', $taxColumnMixed['non_vat_sales'], 'Tax-column non-taxable and exempt sales');
+expect_invoice_value('4250.00', $taxColumnMixed['total_due'], 'Tax-column mixed total');
+$taxColumnMixedEwt = calculate_invoice_print_totals($taxColumnMixedItems, 'Regular', null, '1% EWT');
+expect_invoice_value('40.89', $taxColumnMixedEwt['withholding_amount'], 'Tax-column mixed EWT');
+expect_invoice_value('4209.11', $taxColumnMixedEwt['total_due'], 'Tax-column mixed total after EWT');
+
+// Existing invoice-header treatments remain authoritative outside Regular mode.
+$headerNonVatMixed = calculate_invoice_print_totals($taxColumnMixedItems, 'Non-VAT', null, 'NO EWT');
+expect_invoice_value('0.00', $headerNonVatMixed['vat_amount'], 'Non-VAT header mixed-line VAT');
+expect_invoice_value('4250.00', $headerNonVatMixed['non_vat_sales'], 'Non-VAT header includes full invoice subtotal');
+expect_invoice_value('0.00', $headerNonVatMixed['zero_rated_sales'], 'Non-VAT header zero-rated sales');
+
+$headerZeroRatedMixed = calculate_invoice_print_totals($taxColumnMixedItems, 'Zero Rated', null, 'NO EWT');
+expect_invoice_value('0.00', $headerZeroRatedMixed['vat_amount'], 'Zero Rated header mixed-line VAT');
+expect_invoice_value('0.00', $headerZeroRatedMixed['non_vat_sales'], 'Zero Rated header non-VAT sales');
+expect_invoice_value('4250.00', $headerZeroRatedMixed['zero_rated_sales'], 'Zero Rated header includes full invoice subtotal');
+
+expect_invoice_exception(
+    static fn(): array => calculate_invoice_print_totals($taxColumnMixedItems, 'Discount', null, 'NO EWT'),
+    'Discount VAT treatment produces unreliable totals',
+    'Discount header continues to reject mixed line tax values'
+);
+
+$taxableOnly = calculate_invoice_print_totals([
+    ['amount' => '1000.00', 'tax_code' => 'Tax', 'print_type' => 'Non-Vat'],
+    ['amount' => '500.00', 'tax_code' => 'Tax', 'print_type' => 'Regular'],
+], 'Regular', null, 'NO EWT');
+expect_invoice_value('160.71', $taxableOnly['vat_amount'], 'Taxable-only VAT');
+expect_invoice_value('0.00', $taxableOnly['non_vat_sales'], 'Taxable-only non-taxable sales');
+
+$nonTaxableOnly = calculate_invoice_print_totals([
+    ['amount' => '1000.00', 'tax_code' => 'Non', 'print_type' => 'Regular'],
+    ['amount' => '500.00', 'tax_code' => 'Exempt', 'print_type' => 'Regular'],
+], 'Regular', null, 'NO EWT');
+expect_invoice_value('0.00', $nonTaxableOnly['vat_amount'], 'Non-taxable-only VAT');
+expect_invoice_value('1500.00', $nonTaxableOnly['non_vat_sales'], 'Non-taxable-only sales');
+
+$changedTaxLine = calculate_invoice_print_totals([
+    ['amount' => '1000.00', 'tax_code' => 'Non', 'print_type' => 'Regular'],
+    ['amount' => '500.00', 'tax_code' => 'Tax', 'print_type' => 'Regular'],
+], 'Regular', null, 'NO EWT');
+expect_invoice_value('53.57', $changedTaxLine['vat_amount'], 'Changing one tax line leaves the other line non-taxable');
+expect_invoice_value('1000.00', $changedTaxLine['non_vat_sales'], 'Changed tax classification non-taxable sales');
+
 $regularMixedEwt = calculate_invoice_print_totals($mixedItems, 'Regular', null, '1% EWT');
 expect_invoice_value('233.94', $regularMixedEwt['withholding_amount'], 'Mixed regular EWT');
 expect_invoice_value('23606.06', $regularMixedEwt['total_due'], 'Mixed regular total after EWT');

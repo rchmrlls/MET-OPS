@@ -1,4 +1,5 @@
-<?php $page_title = 'QuickBooks Status';
+<?php if (false): // QuickBooks integration status page temporarily disabled; retained for later reactivation.
+$page_title = 'QuickBooks Status';
 
 require __DIR__ . '/includes/layout_start.php';
 $pdo = db();
@@ -49,4 +50,4 @@ $counts = $pdo->query("SELECT status,COUNT(*) total FROM qb_jobs GROUP BY status
                     </tr><?php endforeach; ?></tbody>
         </table>
     </div>
-</section><?php require __DIR__ . '/includes/footer.php'; ?>
+</section><?php require __DIR__ . '/includes/footer.php'; endif; ?>

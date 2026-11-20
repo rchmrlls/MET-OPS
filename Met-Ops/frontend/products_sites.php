@@ -141,19 +141,19 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
         </div>
     </div>
     <form method="get" class="catalog-toolbar">
-        <div class="catalog-search"><i class="bi bi-search" aria-hidden="true"></i><label class="visually-hidden" for="productSearch">Search products</label><input id="productSearch" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search product name, HT code, QB code, or description"><button class="btn btn-outline-primary" type="submit">Search</button></div>
+        <div class="catalog-search"><i class="bi bi-search" aria-hidden="true"></i><label class="visually-hidden" for="productSearch">Search products</label><input id="productSearch" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search product name, HT code, invoice code, or description"><button class="btn btn-outline-primary" type="submit">Search</button></div>
         <?php if ($manager): ?><label class="visually-hidden" for="productStatus">Product status</label><select id="productStatus" class="form-select catalog-filter" name="status">
                 <option value="all" <?= $productStatus === 'all' ? 'selected' : '' ?>>All statuses</option>
                 <option value="active" <?= $productStatus === 'active' ? 'selected' : '' ?>>Active</option>
                 <option value="inactive" <?= $productStatus === 'inactive' ? 'selected' : '' ?>>Inactive</option>
             </select><?php endif; ?>
-        <label class="visually-hidden" for="productSort">Sort products</label><select id="productSort" class="form-select catalog-filter" name="sort"><?php foreach (['product_name' => 'Product Name', 'ht_code' => 'HT Code', 'qb_code' => 'QB Code', 'ht_description' => 'HT Description', 'qb_description' => 'QB Description'] as $key => $label): ?><option value="<?= e($key) ?>" <?= $sortKey === $key ? 'selected' : '' ?>>Sort: <?= e($label) ?></option><?php endforeach; ?></select>
+        <label class="visually-hidden" for="productSort">Sort products</label><select id="productSort" class="form-select catalog-filter" name="sort"><?php foreach (['product_name' => 'Product Name', 'ht_code' => 'HT Code', 'qb_code' => 'Invoice Code', 'ht_description' => 'HT Description', 'qb_description' => 'Invoice Description'] as $key => $label): ?><option value="<?= e($key) ?>" <?= $sortKey === $key ? 'selected' : '' ?>>Sort: <?= e($label) ?></option><?php endforeach; ?></select>
         <a class="btn btn-light catalog-clear" href="products_sites.php" aria-label="Clear product search and filters">Clear</a>
     </form>
     <div class="table-responsive catalog-table-wrap" tabindex="0" aria-label="Product master table">
         <table class="table catalog-table">
             <thead>
-                <tr><?php foreach (['Product Name', 'HT Code', 'QB Code', 'HT Description', 'QB Description', 'U/M', 'Price (PHP)', 'KG/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Status</th>
+                <tr><?php foreach (['Product Name', 'HT Code', 'Invoice Code', 'HT Description', 'Invoice Description', 'U/M', 'Price (PHP)', 'KG/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Status</th>
                         <th scope="col">Actions</th><?php endif; ?>
                 </tr>
             </thead>
@@ -168,7 +168,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                         <td class="catalog-code"><?= e($p['ht_code'] ?? '') ?><?php if (empty($p['ht_code'])): ?><span class="catalog-missing">Missing</span><?php endif; ?></td>
                         <td class="catalog-code"><?= e($p['qb_code'] ?? '') ?><?php if (empty($p['qb_code'])): ?><span class="catalog-missing">Missing</span><?php endif; ?></td>
                         <td><span class="catalog-description" title="<?= e($p['ht_description'] ?? '') ?>" aria-label="HT Description: <?= e($p['ht_description'] ?? 'Not set') ?>"><?= e($p['ht_description'] ?? '—') ?></span></td>
-                        <td><span class="catalog-description" title="<?= e($p['qb_description'] ?? '') ?>" aria-label="QB Description: <?= e($p['qb_description'] ?? 'Not set') ?>"><?= e($p['qb_description'] ?? '—') ?></span></td>
+                        <td><span class="catalog-description" title="<?= e($p['qb_description'] ?? '') ?>" aria-label="Invoice Description: <?= e($p['qb_description'] ?? 'Not set') ?>"><?= e($p['qb_description'] ?? '—') ?></span></td>
                         <td><?= e($p['u_m'] ?? '—') ?></td>
                         <td class="catalog-number"><?= $p['default_price'] !== null ? '₱' . number_format((float)$p['default_price'], 2, '.', ',') : '—' ?></td>
                         <td class="catalog-number"><?= $p['kg_per_box'] !== null ? number_format((float)$p['kg_per_box'], 3) : '—' ?></td>
@@ -254,8 +254,8 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                                 <div class="col-md-4"><label class="form-label" for="productHt">HT Code</label><input class="form-control" id="productHt" name="ht_code" maxlength="100" data-product-required value="<?= e($postedProduct['ht_code'] ?? '') ?>">
                                     <div class="form-text">Withdrawal identifier from your HT list.</div>
                                 </div>
-                                <div class="col-md-4"><label class="form-label" for="productQb">QB Code</label><input class="form-control" id="productQb" name="qb_code" maxlength="100" value="<?= e($postedProduct['qb_code'] ?? '') ?>">
-                                    <div class="form-text">Invoice business code; separate from QuickBooks ListID.</div>
+                                <div class="col-md-4"><!-- Former label: QB Code. --><label class="form-label" for="productQb">Invoice Code</label><input class="form-control" id="productQb" name="qb_code" maxlength="100" value="<?= e($postedProduct['qb_code'] ?? '') ?>">
+                                    <div class="form-text">Business code printed on the invoice.</div>
                                 </div>
                             </div>
                         </fieldset>
@@ -263,7 +263,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                             <legend>Descriptions</legend>
                             <div class="row g-3">
                                 <div class="col-md-6"><label class="form-label" for="productHtDescription">HT Description</label><input class="form-control" id="productHtDescription" name="ht_description" maxlength="255" data-product-required value="<?= e($postedProduct['ht_description'] ?? '') ?>"></div>
-                                <div class="col-md-6"><label class="form-label" for="productQbDescription">QB Description</label><input class="form-control" id="productQbDescription" name="qb_description" maxlength="255" value="<?= e($postedProduct['qb_description'] ?? '') ?>"></div>
+                                <div class="col-md-6"><!-- Former label: QB Description. --><label class="form-label" for="productQbDescription">Invoice Description</label><input class="form-control" id="productQbDescription" name="qb_description" maxlength="255" value="<?= e($postedProduct['qb_description'] ?? '') ?>"></div>
                             </div>
                         </fieldset>
                         <fieldset class="catalog-fieldset mb-0">

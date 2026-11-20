@@ -104,6 +104,7 @@ try {
         $amount = round($line['qty'] * $line['price'], 2, PHP_ROUND_HALF_UP);
         $calculationItems[] = [
             'amount' => number_format($amount, 2, '.', ''),
+            'tax_code' => $line['tax'],
             'print_type' => $line['print_type'],
         ];
     }

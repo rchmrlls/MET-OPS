@@ -146,13 +146,16 @@ $logs = $isAdmin ? $pdo->query('SELECT a.*,e.full_name FROM activity_logs a LEFT
                     <p>Withdrawal and invoice draft records are stored in the local database.</p>
                 </div><span class="status-pill status-success">Connected</span>
             </div>
+            <!-- QuickBooks Web Connector status is temporarily disabled.
             <div class="setting-row">
                 <div><strong>QuickBooks Web Connector</strong>
                     <p>Phase 2 acceptance requires a live Web Connector and company-file test.</p>
                 </div><span class="status-pill status-muted">Pending</span>
             </div>
+            -->
         </div>
     </section><?php endif; ?>
+<!-- QuickBooks connection settings are temporarily disabled.
 <section class="panel">
     <div class="panel-header">
         <div>
@@ -173,4 +176,5 @@ $logs = $isAdmin ? $pdo->query('SELECT a.*,e.full_name FROM activity_logs a LEFT
         </div>
     </div>
 </section>
+-->
 <?php require __DIR__ . '/includes/footer.php'; ?>

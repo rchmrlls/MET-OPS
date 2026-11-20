@@ -60,7 +60,7 @@ $query = $pdo->prepare(
     'SELECT i.id,i.invoice_number,i.invoice_date,i.status,
             i.customer_name_snapshot AS customer_name,
             w.withdrawal_no,COALESCE(invoice_lines.item_count,0) AS item_count,
-            COALESCE(i.print_total_due,invoice_lines.line_total) AS total_due
+            COALESCE(i.print_subtotal - COALESCE(i.print_discount_amount,0),invoice_lines.line_total) AS total_due
      FROM invoices i
      LEFT JOIN withdrawals w ON w.id=i.withdrawal_id
      LEFT JOIN (
@@ -134,8 +134,8 @@ require __DIR__ . '/includes/layout_start.php';
                             <td><span class="status-pill <?= e(status_class($invoice['status'])) ?>"><?= e($invoice['status']) ?></span></td>
                             <td class="text-end">
                                 <?php if ($invoice['invoice_number'] && (int) $invoice['item_count'] > 0): ?>
-                                    <a class="btn btn-sm btn-outline-primary" href="invoice_print.php?invoice_id=<?= (int) $invoice['id'] ?>">
-                                        <i class="bi bi-printer" aria-hidden="true"></i> Preview / Print
+                                    <a class="btn btn-sm btn-outline-primary" data-invoice-print href="invoice_print.php?invoice_id=<?= (int) $invoice['id'] ?>">
+                                        <i class="bi bi-printer" aria-hidden="true"></i> Print
                                     </a>
                                 <?php else: ?>
                                     <span class="text-secondary small">Not printable</span>

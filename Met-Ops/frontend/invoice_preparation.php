@@ -122,6 +122,13 @@ $products = get_products($pdo);
 $products = array_values(array_filter($products, static fn($p) => trim((string)($p['qb_code'] ?? '')) !== ''));
 $customers = $pdo->query('SELECT id,client_name,qb_list_id FROM clients WHERE active=1 ORDER BY client_name')->fetchAll();
 $sites = get_sites($pdo);
+$defaultSiteId = null;
+foreach ($sites as $site) {
+    if (strcasecmp(trim((string) $site['site_name']), 'High Tower Cold Storage') === 0) {
+        $defaultSiteId = (int) $site['id'];
+        break;
+    }
+}
 $discountOptions = invoice_print_discount_options();
 $locked = in_array($inv['status'], ['Invoiced', 'Queued', 'Processing', 'Uncertain Result'], true);
 
@@ -133,7 +140,8 @@ foreach ($lines as $ln) {
 
 <div class="page-intro">
     <div>
-        <h2>Prepare QuickBooks Invoice</h2>
+        <!-- QuickBooks-specific heading temporarily disabled: <h2>Prepare QuickBooks Invoice</h2> -->
+        <h2>Prepare Invoice</h2>
         <p>
             Invoice draft for withdrawal <?= e($no) ?>.
             Invoice edits never overwrite the original withdrawal.
@@ -142,9 +150,9 @@ foreach ($lines as $ln) {
 
     <div class="toolbar">
         <?php if (!empty($inv['invoice_number'])): ?>
-            <a href="invoice_print.php?invoice_id=<?= (int) $inv['id'] ?>" class="btn btn-outline-primary">
+            <a data-invoice-print href="invoice_print.php?invoice_id=<?= (int) $inv['id'] ?>" class="btn btn-outline-primary">
                 <i class="bi bi-printer" aria-hidden="true"></i>
-                View saved print
+                Print Invoice
             </a>
         <?php endif; ?>
         <a href="withdrawals.php" class="btn btn-light">
@@ -154,10 +162,12 @@ foreach ($lines as $ln) {
     </div>
 </div>
 
+<!-- QuickBooks connection and posting notice temporarily disabled.
 <div class="notice warning">
     <strong>QuickBooks posting is unavailable:</strong>
     this installation has no Web Connector service or verified company-file mappings. Drafts save locally; sending is disabled to prevent unsupported fields or duplicate inventory effects.
 </div>
+-->
 
 <form
     method="post"
@@ -191,7 +201,7 @@ foreach ($lines as $ln) {
                     <select class="form-select" name="customer_id" required <?= $locked ? 'disabled' : '' ?>>
                         <option value="">Select customer</option>
                         <?php foreach ($customers as $customer): ?>
-                            <option value="<?= (int)$customer['id'] ?>" <?= (int)$inv['customer_id'] === (int)$customer['id'] ? 'selected' : '' ?>><?= e($customer['client_name']) ?><?= !$customer['qb_list_id'] ? ' — QuickBooks mapping required' : '' ?></option>
+                            <option value="<?= (int)$customer['id'] ?>" <?= (int)$inv['customer_id'] === (int)$customer['id'] ? 'selected' : '' ?>><?= e($customer['client_name']) ?><?php if (false): ?> — QuickBooks mapping required<?php endif; ?></option>
                         <?php endforeach; ?>
                     </select>
                     <?php if (!$locked): ?><div class="form-text">Defaults to the source withdrawal customer. Changing it affects this invoice only.</div><?php endif; ?>
@@ -316,11 +326,11 @@ foreach ($lines as $ln) {
                 </thead>
 
                 <tbody>
-                    <?php foreach ($lines as $i => $ln): ?>
+                    <?php foreach ($lines as $i => $ln): $selectedSiteId = ($ln['site_id'] ?? '') !== '' ? (int) $ln['site_id'] : $defaultSiteId; ?>
                         <tr>
                             <td>
                                 <select class="form-select table-input" name="items[<?= $i ?>][site_id]" required <?= $locked ? 'disabled' : '' ?>>
-                                    <option value="">Select site</option><?php foreach ($sites as $site): ?><option value="<?= (int)$site['id'] ?>" <?= (string)$ln['site_id'] === (string)$site['id'] ? 'selected' : '' ?>><?= e($site['site_name']) ?></option><?php endforeach; ?>
+                                    <option value="">Select site</option><?php foreach ($sites as $site): ?><option value="<?= (int)$site['id'] ?>" <?= $selectedSiteId === (int)$site['id'] ? 'selected' : '' ?>><?= e($site['site_name']) ?></option><?php endforeach; ?>
                                 </select>
                                 <input
                                     type="hidden"
@@ -433,19 +443,23 @@ foreach ($lines as $ln) {
                     </strong>
                 </div>
 
+                <!-- QuickBooks tax configuration note temporarily disabled.
                 <div class="form-text mt-2">
                     Tax treatment is stored as the selected tax code;
                     actual tax calculation follows QuickBooks configuration.
                 </div>
+                -->
             </div>
         </div>
     </section>
 
     <div class="page-bottom-actions">
+        <!-- QuickBooks submission status temporarily disabled.
         <span class="muted text-small">
             Status: <?= e($inv['status']) ?>.
             No invoice has been sent to QuickBooks.
         </span>
+        -->
 
         <div class="right">
             <a
@@ -459,6 +473,7 @@ foreach ($lines as $ln) {
                     Save Invoice Draft
                 </button>
 
+                <!-- QuickBooks submission action temporarily disabled.
                 <button
                     class="btn btn-teal"
                     type="button"
@@ -466,6 +481,7 @@ foreach ($lines as $ln) {
                     title="Phase 2 integration not configured">
                     Send to QuickBooks Setup Required
                 </button>
+                -->
             <?php endif; ?>
         </div>
     </div>
@@ -496,7 +512,10 @@ foreach ($lines as $ln) {
         });
         tbody.addEventListener('click', event => {
             const button = event.target.closest('.remove-invoice-line');
-            if (button && tbody.rows.length > 1) button.closest('tr').remove();
+            if (button && tbody.rows.length > 1) {
+                button.closest('tr').remove();
+                recalculateInvoiceTotal();
+            }
         });
         tbody.addEventListener('change', (event) => {
             if (!event.target.matches('.product-select')) return;
@@ -514,6 +533,10 @@ foreach ($lines as $ln) {
 
         function updateAmount(row) {
             row.querySelector('.amount').value = window.formatMoneyValue(Number(row.querySelector('.invoice-qty').value || 0) * window.parseMoneyValue(row.querySelector('.invoice-price').value || 0));
+            recalculateInvoiceTotal();
+        }
+
+        function recalculateInvoiceTotal() {
             document.querySelector('[data-invoice-total]').textContent = [...tbody.querySelectorAll('.amount')].reduce((sum, input) => sum + window.parseMoneyValue(input.value), 0).toLocaleString('en-PH', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2

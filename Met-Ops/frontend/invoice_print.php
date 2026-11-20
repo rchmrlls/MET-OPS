@@ -203,6 +203,8 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
         $setCell(2, 9, $formatDateValue, 'cell-overflow cell-date', 2);
         $setCell(4, 5, (string) ($invoice['customer_name_snapshot'] ?? ''), 'cell-overflow cell-left cell-customer', 4);
         $setCell(6, 3, (string) ($invoice['customer_tin_snapshot'] ?? ''), 'cell-overflow cell-left cell-large');
+        $poNumber = trim((string) ($invoice['po_no'] ?? ''));
+        $setCell(6, 9, '' . $poNumber, 'cell-clip cell-date', 2);
         $setCell(7, 5, (string) ($invoice['customer_address_snapshot'] ?? ''), 'cell-overflow cell-left', 5);
         for ($lineIndex = 0; $lineIndex < 14; $lineIndex++) {
             $row = 12 + $lineIndex;

@@ -133,10 +133,20 @@ function calculate_invoice_print_totals(
     foreach ($items as $item) {
         $amount = invoice_print_money_to_cents($item['amount'] ?? null);
         $subtotal += $amount;
-        if (($item['print_type'] ?? '') === 'Non-Vat') {
-            $nonVatSubtotal += $amount;
-        } elseif (!in_array(($item['print_type'] ?? ''), ['', 'Regular'], true)) {
+        $taxCode = $item['tax_code'] ?? null;
+        if ($taxCode !== null && !in_array($taxCode, ['Non', 'Tax', 'Exempt'], true)) {
+            throw new RuntimeException('An invoice line has an invalid TAX value.');
+        }
+        $printType = $item['print_type'] ?? '';
+        if (!in_array($printType, ['', 'Regular', 'Non-Vat'], true)) {
             throw new RuntimeException('An invoice line has an invalid print tax type.');
+        }
+        // Saved line TAX is authoritative; print_type remains a fallback for legacy callers.
+        $isNonVat = $taxCode !== null
+            ? $taxCode !== 'Tax'
+            : $printType === 'Non-Vat';
+        if ($isNonVat) {
+            $nonVatSubtotal += $amount;
         }
     }
 
