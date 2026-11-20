@@ -46,17 +46,12 @@ if (!$lines) {
 
 $printLines = [];
 foreach ($lines as $line) {
-    $description = trim(
-        (string) $line['product_name'] . ' '
-        . (string) ($line['description'] ?? '')
-    );
-    $description = str_replace(["\r\n", "\r", "\n"], ' ', $description);
     $printLines[] = [
         'line' => $line,
-        'description' => $description,
+        'description' => invoice_print_product_description($line),
     ];
 }
-$pageLines = array_chunk($printLines, 14);
+$pageLines = invoice_print_paginate_lines($printLines);
 $financialFields = [
     'print_vat_mode', 'print_ewt_mode',
     'print_subtotal', 'print_discount_amount', 'print_regular_sales', 'print_vat_amount',
@@ -83,11 +78,14 @@ $formatDate = static function (?string $value): string {
 $rowHeights = [
     1 => 1.5, 2 => 17.25, 3 => 16.5, 4 => 17.25,
     5 => 10.5, 6 => 19.5, 7 => 29.25, 8 => 9,
-    9 => 15, 10 => 41.25, 11 => 10.5, 12 => 12.75,
+    9 => 0, 10 => 29.1667, 11 => 13.8889, 12 => 12.75,
     13 => 12.75, 14 => 12.75, 15 => 12.75, 16 => 12.75,
     17 => 12.75, 18 => 12.75, 19 => 12.75, 20 => 12.75,
-    21 => 12.75, 22 => 12.75, 23 => 12.75, 24 => 12.75,
-    25 => 12.75, 26 => 12.75, 27 => 68.25, 28 => 17.25,
+    21 => 12.75, 22 => 12.75, 23 => 15.2778, 24 => 16.6667,
+    25 => 16.6667, 26 => 16.6667,
+    // The normalized reference PDFs place the financial summary 16–17 units
+    // lower in MET-OPS; this measured spacer correction aligns those rows.
+    27 => 50.5, 28 => 17.25,
     29 => 16.5, 30 => 28.5, 31 => 18, 32 => 16.5,
     33 => 12.75, 34 => 15, 35 => 18.75,
 ];
@@ -100,7 +98,7 @@ $worksheetWidth = number_format(array_sum($columnWidths) * 0.72, 2, '.', '') . '
 $discountOptions = invoice_print_discount_options();
 $discountPercent = isset($discountOptions[$invoice['print_discount_name'] ?? ''])
     ? number_format($discountOptions[$invoice['print_discount_name']] / 100, 2) . '%'
-    : '0.00%';
+    : '';
 $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
 ?>
 
@@ -145,7 +143,7 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
         .cell-overflow { overflow: visible; white-space: nowrap; overflow-wrap: normal; }
         .cell-clip { overflow: hidden; white-space: nowrap; overflow-wrap: normal; }
         .cell-item-description {
-            overflow: hidden; white-space: nowrap; overflow-wrap: normal; text-overflow: clip;
+            overflow: visible; white-space: nowrap; overflow-wrap: normal;
         }
         .cell-left { padding-left: 4pt; }
         .cell-date { padding-left: 12pt; font-size: 9.36pt; }
@@ -203,7 +201,7 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
         };
         $formatDateValue = $formatDate($invoice['invoice_date']);
         $setCell(2, 9, $formatDateValue, 'cell-overflow cell-date', 2);
-        $setCell(4, 4, (string) ($invoice['customer_name_snapshot'] ?? ''), 'cell-overflow cell-left cell-customer', 4);
+        $setCell(4, 5, (string) ($invoice['customer_name_snapshot'] ?? ''), 'cell-overflow cell-left cell-customer', 4);
         $setCell(6, 3, (string) ($invoice['customer_tin_snapshot'] ?? ''), 'cell-overflow cell-left cell-large');
         $setCell(7, 5, (string) ($invoice['customer_address_snapshot'] ?? ''), 'cell-overflow cell-left', 5);
         for ($lineIndex = 0; $lineIndex < 14; $lineIndex++) {
@@ -211,15 +209,15 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
             $printLine = $invoiceLines[$lineIndex] ?? null;
             if ($printLine) {
                 $line = $printLine['line'];
-                $setCell($row, 3, $printLine['description'], 'cell-item-description cell-left', 4);
-                $setCell($row, 7, number_format((int) $line['quantity']), 'align-right cell-quantity');
-                $setCell($row, 8, $formatMoney($line['price_each']), 'align-right cell-right-edge');
+                $setCell($row, 3, $printLine['description'], 'cell-item-description cell-right', 5);
+                $setCell($row, 8, number_format((int) $line['quantity']), 'align-right cell-quantity');
+                $setCell($row, 9, $formatMoney($line['price_each']), 'align-right cell-right-edge');
                 $setCell($row, 10, $formatMoney($line['amount']), 'align-right cell-right-edge');
             }
         }
 
         if ($hasFinancialSnapshot && $pageIndex === count($pageLines) - 1) {
-            $setCell(26, 4, 'Discount:', 'cell-clip');
+            $setCell(26, 4, '', 'cell-clip');
             $setCell(26, 5, $discountPercent, 'align-right');
             if ($invoice['print_vat_mode'] === 'Regular') {
                 $taxableSales = (float) $invoice['print_subtotal'] - (float) $invoice['print_non_vat_sales'];
@@ -272,7 +270,7 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
                             <?php $cell = $cells[$row][$column] ?? null; ?>
                             <?php if ($cell): ?>
                                 <div class="worksheet-cell <?= e($cell['align'] ?? '') ?>" style="grid-column: <?= $column ?> / span <?= (int) ($cell['span'] ?? 1) ?>">
-                                    <?= nl2br(e($cell['value'])) ?>
+                                    <?= e($cell['value']) ?>
                                 </div>
                             <?php endif; ?>
                         <?php endfor; ?>

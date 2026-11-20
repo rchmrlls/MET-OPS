@@ -117,7 +117,7 @@ require __DIR__ . '/includes/layout_start.php';
                         <label class="form-label" for="newClientName">Client Name</label><input class="form-control" id="newClientName" name="client_name" maxlength="180" required>
                         <label class="form-label mt-3" for="newClientTin">TIN</label><input class="form-control" id="newClientTin" name="tin" maxlength="40">
                         <label class="form-label mt-3" for="newClientAddress">Business Address</label><textarea class="form-control" id="newClientAddress" name="business_address" rows="2"></textarea>
-                        <label class="form-label mt-3" for="newClientTerms">Terms</label><input class="form-control" id="newClientTerms" name="payment_terms" maxlength="100">
+                        <!-- <label class="form-label mt-3" for="newClientTerms">Terms</label><input class="form-control" id="newClientTerms" name="payment_terms" maxlength="100"> -->
                     </div>
                     <div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Save Client</button></div>
                 </form>
@@ -135,7 +135,7 @@ require __DIR__ . '/includes/layout_start.php';
                             <label class="form-label" for="editName<?= (int)$client['id'] ?>">Client Name</label><input class="form-control" id="editName<?= (int)$client['id'] ?>" name="client_name" maxlength="180" value="<?= e($client['client_name']) ?>" required>
                             <label class="form-label mt-3" for="editTin<?= (int)$client['id'] ?>">TIN</label><input class="form-control" id="editTin<?= (int)$client['id'] ?>" name="tin" maxlength="40" value="<?= e($client['tin'] ?? '') ?>">
                             <label class="form-label mt-3" for="editAddress<?= (int)$client['id'] ?>">Business Address</label><textarea class="form-control" id="editAddress<?= (int)$client['id'] ?>" name="business_address" rows="2"><?= e($client['business_address'] ?? '') ?></textarea>
-                            <label class="form-label mt-3" for="editTerms<?= (int)$client['id'] ?>">Terms</label><input class="form-control" id="editTerms<?= (int)$client['id'] ?>" name="payment_terms" maxlength="100" value="<?= e($client['payment_terms'] ?? '') ?>">
+                            <!-- <label class="form-label mt-3" for="editTerms<?= (int)$client['id'] ?>">Terms</label><input class="form-control" id="editTerms<?= (int)$client['id'] ?>" name="payment_terms" maxlength="100" value="<?= e($client['payment_terms'] ?? '') ?>"> -->
                             <label class="form-label mt-3" for="editActive<?= (int)$client['id'] ?>">Status</label><select class="form-select" id="editActive<?= (int)$client['id'] ?>" name="active">
                                 <option value="1" <?= $client['active'] ? 'selected' : '' ?>>Active</option>
                                 <option value="0" <?= !$client['active'] ? 'selected' : '' ?>>Inactive</option>

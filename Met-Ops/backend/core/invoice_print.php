@@ -40,6 +40,25 @@ function invoice_print_customer_snapshot(array $invoice, array $customer, int $c
     ];
 }
 
+function invoice_print_product_description(array $line): string
+{
+    $description = (string) ($line['description'] ?? '');
+    if (trim($description) !== '') {
+        return $description;
+    }
+
+    return (string) ($line['product_name'] ?? '');
+}
+
+function invoice_print_paginate_lines(array $lines, int $pageSize = 14): array
+{
+    if ($pageSize < 1) {
+        throw new InvalidArgumentException('Invoice print page size must be positive.');
+    }
+
+    return array_chunk($lines, $pageSize);
+}
+
 function invoice_print_money_to_cents(mixed $value): int
 {
     $value = trim((string) $value);
@@ -152,7 +171,7 @@ function calculate_invoice_print_totals(
     $withholdingDenominator = match ($vatMode) {
         'Regular' => 2800,
         'Non-VAT' => 100,
-        'Zero Rated' => 112,
+        'Zero Rated' => 100,
         default => 1,
     };
     $withholding = $ewtMode === '1% EWT'

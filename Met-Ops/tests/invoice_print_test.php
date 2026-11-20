@@ -69,6 +69,16 @@ $nonVatOnlyEwt = calculate_invoice_print_totals($nonVatItems, 'Regular', null, '
 expect_invoice_value('238.40', $nonVatOnlyEwt['withholding_amount'], 'Non-VAT-only EWT');
 expect_invoice_value('23601.60', $nonVatOnlyEwt['total_due'], 'Non-VAT-only total after EWT');
 
+$zeroPricedLine = calculate_invoice_print_totals(
+    [['amount' => '0.00', 'print_type' => 'Regular']],
+    'Regular',
+    null,
+    'NO EWT'
+);
+expect_invoice_value('0.00', $zeroPricedLine['subtotal'], 'Zero-priced line subtotal');
+expect_invoice_value('0.00', $zeroPricedLine['vat_amount'], 'Zero-priced line VAT');
+expect_invoice_value('0.00', $zeroPricedLine['total_due'], 'Zero-priced line total due');
+
 foreach ([$mixedItems, $regularItems, $nonVatItems] as $items) {
     $nonVatNoEwt = calculate_invoice_print_totals($items, 'Non-VAT', null, 'NO EWT');
     expect_invoice_value('23840.00', $nonVatNoEwt['non_vat_sales'], 'Non-VAT treatment sales');
@@ -83,8 +93,8 @@ foreach ([$mixedItems, $regularItems, $nonVatItems] as $items) {
     expect_invoice_value('23840.00', $zeroRatedNoEwt['total_due'], 'Zero Rated total');
 
     $zeroRatedEwt = calculate_invoice_print_totals($items, 'Zero Rated', null, '1% EWT');
-    expect_invoice_value('212.86', $zeroRatedEwt['withholding_amount'], 'Zero Rated EWT');
-    expect_invoice_value('23627.14', $zeroRatedEwt['total_due'], 'Zero Rated total after EWT');
+    expect_invoice_value('238.40', $zeroRatedEwt['withholding_amount'], 'Zero Rated EWT');
+    expect_invoice_value('23601.60', $zeroRatedEwt['total_due'], 'Zero Rated total after EWT');
 }
 
 $roundingFixtures = [
@@ -94,9 +104,9 @@ $roundingFixtures = [
     ['Non-VAT', '0.50', '0.01', '0.50'],
     ['Non-VAT', '0.56', '0.01', '0.55'],
     ['Non-VAT', '1.50', '0.02', '1.49'],
-    ['Zero Rated', '0.50', '0.00', '0.50'],
-    ['Zero Rated', '0.56', '0.01', '0.56'],
-    ['Zero Rated', '1.50', '0.01', '1.49'],
+    ['Zero Rated', '0.50', '0.01', '0.50'],
+    ['Zero Rated', '0.56', '0.01', '0.55'],
+    ['Zero Rated', '1.50', '0.02', '1.49'],
 ];
 foreach ($roundingFixtures as [$vatMode, $amount, $expectedEwt, $expectedDue]) {
     $result = calculate_invoice_print_totals(
@@ -189,6 +199,48 @@ $missingHistoricalSnapshot = invoice_print_customer_snapshot(
 );
 expect_invoice_value('', (string) $missingHistoricalSnapshot['customer_name_snapshot'], 'Missing historical name stays blank');
 expect_invoice_value('', (string) $missingHistoricalSnapshot['customer_tin_snapshot'], 'Missing historical TIN stays blank');
+
+$savedProductDescription = invoice_print_product_description([
+    'product_name' => 'INTERNAL PRODUCT NAME',
+    'description' => 'Authoritative invoice description',
+]);
+expect_invoice_value('Authoritative invoice description', $savedProductDescription, 'Saved invoice description is printed without the internal product name');
+
+$savedMultilineDescription = "Original description\nwith source newline";
+expect_invoice_value(
+    $savedMultilineDescription,
+    invoice_print_product_description([
+        'product_name' => 'INTERNAL PRODUCT NAME',
+        'description' => $savedMultilineDescription,
+    ]),
+    'Saved description text is preserved for single-line rendering'
+);
+
+expect_invoice_value(
+    'Legacy product name',
+    invoice_print_product_description(['product_name' => 'Legacy product name', 'description' => '']),
+    'Legacy invoice falls back to its saved product name'
+);
+
+foreach ([1, 5, 14, 15, 28, 29, 42] as $lineCount) {
+    $linesForPagination = array_map(
+        static fn(int $lineNumber): array => ['line_number' => $lineNumber],
+        range(1, $lineCount)
+    );
+    $pages = invoice_print_paginate_lines($linesForPagination);
+    $flattenedLines = array_merge(...$pages);
+    if ($flattenedLines !== $linesForPagination) {
+        throw new RuntimeException('Invoice pagination omitted, duplicated, or reordered a line at ' . $lineCount . ' items.');
+    }
+    if (count($pages) !== (int) ceil($lineCount / 14)) {
+        throw new RuntimeException('Invoice pagination returned an unexpected page count at ' . $lineCount . ' items.');
+    }
+    foreach ($pages as $page) {
+        if (count($page) > 14) {
+            throw new RuntimeException('An invoice print page exceeded the 14-row worksheet grid.');
+        }
+    }
+}
 
 $changedCustomerSnapshot = invoice_print_customer_snapshot(
     ['customer_id' => 9, 'customer_name_snapshot' => 'Original Customer'],
