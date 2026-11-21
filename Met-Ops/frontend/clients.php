@@ -207,6 +207,7 @@ require __DIR__ . '/includes/layout_start.php';
             <td>${escapeHtml(invoice.item_count)}</td><td>${escapeHtml(Number(invoice.total_quantity || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 }))}</td>
             <td>${invoice.invoice_amount === null ? '—' : escapeHtml(formatPeso(invoice.invoice_amount))}</td>
             <td><span class="badge ${invoice.status === 'Invoiced' ? 'text-bg-success' : 'text-bg-secondary'}">${escapeHtml(invoice.status)}</span></td>
+            <td><span class="status-pill ${invoice.printed_at === null ? 'status-warning' : 'status-success'}" data-invoice-print-status="${Number(invoice.id)}">${invoice.printed_at === null ? 'NOT PRINTED' : 'PRINTED'}</span></td>
             <td>${invoice.invoice_number && Number(invoice.item_count) > 0 ? `<a class="btn btn-sm btn-outline-primary" data-invoice-print href="invoice_print.php?invoice_id=${Number(invoice.id)}">Print</a>` : '<span class="text-secondary">Not printable</span>'}</td>
         </tr>`).join('');
                     const first = (data.page - 1) * 10 + 1;
@@ -215,7 +216,7 @@ require __DIR__ . '/includes/layout_start.php';
                     for (let p = Math.max(1, data.page - 2); p <= Math.min(data.pages, data.page + 2); p++) {
                         pageButtons += `<button type="button" class="btn btn-sm ${p === data.page ? 'btn-primary' : 'btn-outline-secondary'}" data-page="${p}" ${p === data.page ? 'aria-current="page"' : ''}>${p}</button>`;
                     }
-                    box.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Invoice No.</th><th>Invoice Date</th><th>Withdrawal No.</th><th>Items</th><th>Total Quantity</th><th>Invoice Amount (PHP)</th><th>Status</th><th>Action</th></tr></thead><tbody>${historyRows}</tbody></table></div>
+                    box.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Invoice No.</th><th>Invoice Date</th><th>Withdrawal No.</th><th>Items</th><th>Total Quantity</th><th>Invoice Amount (PHP)</th><th>Status</th><th>Print Status</th><th>Action</th></tr></thead><tbody>${historyRows}</tbody></table></div>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><span class="small text-secondary">Showing ${first}–${last} of ${data.total} invoices</span>
             <div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-secondary" data-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>Previous</button>${pageButtons}<button type="button" class="btn btn-sm btn-outline-secondary" data-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Next</button></div></div>`;
                     box.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => loadHistory(panel, Number(button.dataset.page))));

@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS products (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, product_name VARCHAR(255) NOT NULL UNIQUE,
  ht_code VARCHAR(100) NULL, qb_code VARCHAR(100) NULL, ht_description VARCHAR(255) NULL, qb_description VARCHAR(255) NULL,
  item_code VARCHAR(100) NULL, description VARCHAR(255) NULL, u_m VARCHAR(40) NULL,
- default_price DECIMAL(12,2) NULL, kg_per_box DECIMAL(12,3) NULL, qb_list_id VARCHAR(100) NULL, active TINYINT(1) NOT NULL DEFAULT 1,
+ default_price DECIMAL(12,2) NULL, kg_per_box DECIMAL(12,3) NULL, packs_per_box INT UNSIGNED NULL, qb_list_id VARCHAR(100) NULL,
+ active TINYINT(1) NOT NULL DEFAULT 1,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
  UNIQUE KEY uq_products_ht_code(ht_code), UNIQUE KEY uq_products_qb_code(qb_code)
 ) ENGINE=InnoDB;
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS invoices (
  po_no VARCHAR(100) NULL, memo TEXT NULL, status ENUM('Draft','Ready','Queued','Processing','Invoiced','Error','Uncertain Result') NOT NULL DEFAULT 'Draft',
  qb_invoice_no VARCHAR(100) NULL, qb_txn_id VARCHAR(100) NULL, submitted_by BIGINT UNSIGNED NULL, submitted_at DATETIME NULL,
  print_vat_mode VARCHAR(20) NULL, print_discount_name VARCHAR(80) NULL, print_ewt_mode VARCHAR(20) NULL, print_subtotal DECIMAL(14,2) NULL, print_discount_amount DECIMAL(14,2) NULL, print_regular_sales DECIMAL(14,2) NULL, print_vat_amount DECIMAL(14,2) NULL, print_zero_rated_sales DECIMAL(14,2) NULL, print_non_vat_sales DECIMAL(14,2) NULL, print_withholding_amount DECIMAL(14,2) NULL, print_total_due DECIMAL(14,2) NULL,
+ printed_at DATETIME NULL,
  created_by BIGINT UNSIGNED NULL, updated_by BIGINT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
  UNIQUE KEY uq_invoices_invoice_number(invoice_number),
  CONSTRAINT fk_invoice_withdrawal FOREIGN KEY(withdrawal_id) REFERENCES withdrawals(id), CONSTRAINT fk_invoice_customer FOREIGN KEY(customer_id) REFERENCES clients(id),

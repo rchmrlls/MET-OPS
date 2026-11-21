@@ -27,16 +27,30 @@ try {
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Initial Setup</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="assets/css/ui-system.css?v=<?= (int) filemtime(__DIR__ . '/assets/css/ui-system.css') ?>" rel="stylesheet">
 </head>
 
-<body class="bg-light">
-    <main class="container py-5" style="max-width:560px">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3">Initial administrator setup</h1>
-                <p>Create the first admin account for the local application.</p><?php if ($message): ?><div class="alert alert-info"><?= e($message) ?></div><?php endif; ?><?php if (!$message || str_contains($message, 'Enter a name')): ?><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><label class="form-label">Full name</label><input class="form-control mb-3" name="full_name" required><label class="form-label">Username</label><input class="form-control mb-3" name="username" required><label class="form-label">Password (10+ characters)</label><input class="form-control mb-3" type="password" name="password" minlength="10" required><button class="btn btn-primary">Create administrator</button></form><?php endif; ?>
-            </div>
+<body class="auth-shell">
+    <main class="auth-card setup-card" aria-labelledby="setupTitle">
+        <div class="auth-brand">
+            <span class="brand-mark" aria-hidden="true">MFC</span>
+            <span class="auth-brand-copy"><strong>MET-OPS</strong><small>Initial configuration</small></span>
         </div>
+        <h1 class="auth-heading" id="setupTitle">Initial administrator setup</h1>
+        <p class="auth-description">Create the administrator account for this operations workspace.</p>
+        <?php if ($message): ?><div class="alert alert-info" role="status"><?= e($message) ?></div><?php endif; ?>
+        <?php if (!$message || str_contains($message, 'Enter a name')): ?>
+            <form method="post" class="auth-form">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <label class="form-label" for="fullName">Full name</label>
+                <input class="form-control" id="fullName" name="full_name" autocomplete="name" required>
+                <label class="form-label" for="setupUsername">Username</label>
+                <input class="form-control" id="setupUsername" name="username" autocomplete="username" required>
+                <label class="form-label" for="setupPassword">Password (10+ characters)</label>
+                <input class="form-control" id="setupPassword" type="password" name="password" minlength="10" autocomplete="new-password" required>
+                <button class="btn btn-primary" type="submit">Create administrator</button>
+            </form>
+        <?php endif; ?>
     </main>
 </body>
 

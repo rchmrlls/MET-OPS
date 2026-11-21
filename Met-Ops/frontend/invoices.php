@@ -57,7 +57,7 @@ $totalPages = max(1, (int) ceil($total / $pageSize));
 $page = min($requestedPage, $totalPages);
 $offset = ($page - 1) * $pageSize;
 $query = $pdo->prepare(
-    'SELECT i.id,i.invoice_number,i.invoice_date,i.status,
+    'SELECT i.id,i.invoice_number,i.invoice_date,i.status,i.printed_at,
             i.customer_name_snapshot AS customer_name,
             w.withdrawal_no,COALESCE(invoice_lines.item_count,0) AS item_count,
             COALESCE(i.print_subtotal - COALESCE(i.print_discount_amount,0),invoice_lines.line_total) AS total_due
@@ -79,7 +79,7 @@ require __DIR__ . '/includes/layout_start.php';
 <div class="page-intro">
     <div>
         <h2>Invoice Archive</h2>
-        <p>Search saved invoices by invoice number, customer, or invoice date and open a print-ready preview.</p>
+        <p>Search saved invoices by number, customer, or date, then print the saved invoice.</p>
     </div>
 </div>
 
@@ -119,6 +119,7 @@ require __DIR__ . '/includes/layout_start.php';
                         <th>Items</th>
                         <th class="text-end">Invoice Amount (PHP)</th>
                         <th>Status</th>
+                        <th>Print Status</th>
                         <th><span class="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
@@ -132,6 +133,7 @@ require __DIR__ . '/includes/layout_start.php';
                             <td><?= (int) $invoice['item_count'] ?></td>
                             <td class="text-end"><?= $invoice['total_due'] === null ? '—' : number_format((float) $invoice['total_due'], 2) ?></td>
                             <td><span class="status-pill <?= e(status_class($invoice['status'])) ?>"><?= e($invoice['status']) ?></span></td>
+                            <td><span class="status-pill <?= $invoice['printed_at'] === null ? 'status-warning' : 'status-success' ?>" data-invoice-print-status="<?= (int) $invoice['id'] ?>"><?= $invoice['printed_at'] === null ? 'NOT PRINTED' : 'PRINTED' ?></span></td>
                             <td class="text-end">
                                 <?php if ($invoice['invoice_number'] && (int) $invoice['item_count'] > 0): ?>
                                     <a class="btn btn-sm btn-outline-primary" data-invoice-print href="invoice_print.php?invoice_id=<?= (int) $invoice['id'] ?>">

@@ -6,6 +6,14 @@ require __DIR__ . '/includes/layout_start.php';
 
 $pdo = db();
 $no = trim($_GET['withdrawal_no'] ?? '');
+$sites = get_sites($pdo);
+$defaultSiteId = null;
+foreach ($sites as $site) {
+    if (strcasecmp(trim((string) $site['site_name']), 'High Tower Cold Storage') === 0) {
+        $defaultSiteId = (int) $site['id'];
+        break;
+    }
+}
 
 $s = $pdo->prepare(
     'SELECT w.*, c.client_name, c.tin, c.business_address, c.payment_terms
@@ -55,7 +63,7 @@ if (!$inv) {
 
     $s = $pdo->prepare(
         'SELECT wi.*, p.qb_code, p.qb_description, p.u_m,
-                p.default_price
+                p.default_price,p.packs_per_box
          FROM withdrawal_items wi
          LEFT JOIN products p ON p.id = wi.product_id
          WHERE wi.withdrawal_id = ?
@@ -68,26 +76,31 @@ if (!$inv) {
     $ins = $pdo->prepare(
         'INSERT INTO invoice_items
          (invoice_id, withdrawal_item_id, source_type, product_id, site_id,
-          product_name, quantity, item_code, description, u_m, price_each,
-          amount, created_by, updated_by)
+          product_name, quantity, item_code, description, u_m,
+          price_each, amount, created_by, updated_by)
          VALUES (?, ?, "WITHDRAWAL", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
     foreach ($copy as $it) {
         $price = (float) ($it['default_price'] ?? 0);
+        $sourceQuantity = (int) $it['quantity'];
+        $packsPerBox = (int) ($it['packs_per_box'] ?? 0);
+        $quantity = $packsPerBox > 0 && $sourceQuantity <= intdiv(999999999, $packsPerBox)
+            ? $sourceQuantity * $packsPerBox
+            : $sourceQuantity;
 
         $ins->execute([
             $iid,
             $it['id'],
             $it['product_id'],
-            null,
+            $defaultSiteId,
             $it['product_name'],
-            $it['quantity'],
+            $quantity,
             $it['qb_code'],
             $it['qb_description'],
             $it['u_m'],
             $price,
-            $price * (float) $it['quantity'],
+            $price * $quantity,
             $_SESSION['user']['id'],
             $_SESSION['user']['id']
         ]);
@@ -121,14 +134,6 @@ $lines = $s->fetchAll();
 $products = get_products($pdo);
 $products = array_values(array_filter($products, static fn($p) => trim((string)($p['qb_code'] ?? '')) !== ''));
 $customers = $pdo->query('SELECT id,client_name,qb_list_id FROM clients WHERE active=1 ORDER BY client_name')->fetchAll();
-$sites = get_sites($pdo);
-$defaultSiteId = null;
-foreach ($sites as $site) {
-    if (strcasecmp(trim((string) $site['site_name']), 'High Tower Cold Storage') === 0) {
-        $defaultSiteId = (int) $site['id'];
-        break;
-    }
-}
 $discountOptions = invoice_print_discount_options();
 $locked = in_array($inv['status'], ['Invoiced', 'Queued', 'Processing', 'Uncertain Result'], true);
 
@@ -150,6 +155,7 @@ foreach ($lines as $ln) {
 
     <div class="toolbar">
         <?php if (!empty($inv['invoice_number'])): ?>
+            <span class="status-pill <?= $inv['printed_at'] === null ? 'status-warning' : 'status-success' ?>" data-invoice-print-status="<?= (int) $inv['id'] ?>"><?= $inv['printed_at'] === null ? 'NOT PRINTED' : 'PRINTED' ?></span>
             <a data-invoice-print href="invoice_print.php?invoice_id=<?= (int) $inv['id'] ?>" class="btn btn-outline-primary">
                 <i class="bi bi-printer" aria-hidden="true"></i>
                 Print Invoice
@@ -530,7 +536,6 @@ foreach ($lines as $ln) {
             if (!price.value || window.parseMoneyValue(price.value) === 0) price.value = window.formatMoneyValue(opt.dataset.price || 0);
             updateAmount(row);
         });
-
         function updateAmount(row) {
             row.querySelector('.amount').value = window.formatMoneyValue(Number(row.querySelector('.invoice-qty').value || 0) * window.parseMoneyValue(row.querySelector('.invoice-price').value || 0));
             recalculateInvoiceTotal();

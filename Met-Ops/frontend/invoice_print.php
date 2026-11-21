@@ -52,6 +52,18 @@ foreach ($lines as $line) {
     ];
 }
 $pageLines = invoice_print_paginate_lines($printLines);
+$printTokens = $_SESSION['_invoice_print_tokens'] ?? [];
+foreach ($printTokens as $token => $tokenData) {
+    if (($tokenData['expires'] ?? 0) < time()) {
+        unset($printTokens[$token]);
+    }
+}
+while (count($printTokens) >= 50) {
+    array_shift($printTokens);
+}
+$printToken = bin2hex(random_bytes(32));
+$printTokens[$printToken] = ['invoice_id' => (int) $invoiceId, 'expires' => time() + 1800];
+$_SESSION['_invoice_print_tokens'] = $printTokens;
 $financialFields = [
     'print_vat_mode', 'print_ewt_mode',
     'print_subtotal', 'print_discount_amount', 'print_regular_sales', 'print_vat_amount',
@@ -107,6 +119,9 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="invoice-id" content="<?= (int) $invoiceId ?>">
+    <meta name="invoice-print-token" content="<?= e($printToken) ?>">
+    <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <title><?= e($invoiceTitle) ?> | <?= e(APP_NAME) ?></title>
     <style>
         @page { size: 162.9mm 208.9mm; margin: 0; }
@@ -282,13 +297,29 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
         </main>
     <?php endforeach; ?>
 
+    <script src="assets/js/invoice-print.js"></script>
     <script>
-        document.getElementById('printInvoice').addEventListener('click', () => {
+        document.getElementById('printInvoice').addEventListener('click', async () => {
+            const registered = await window.registerInvoicePrint(
+                document.querySelector('meta[name="invoice-id"]').content,
+                document.querySelector('meta[name="invoice-print-token"]').content,
+                document.querySelector('meta[name="csrf-token"]').content
+            );
+            if (!registered) {
+                window.alert('The print status could not be saved. You can still print, but the archive may continue to show Not Printed.');
+            }
             try {
                 window.print();
             } catch (error) {
                 window.alert('The browser could not open the print dialog. Please try again or use the browser menu.');
             }
+        });
+        window.addEventListener('beforeprint', () => {
+            window.registerInvoicePrint(
+                document.querySelector('meta[name="invoice-id"]').content,
+                document.querySelector('meta[name="invoice-print-token"]').content,
+                document.querySelector('meta[name="csrf-token"]').content
+            );
         });
     </script>
 </body>

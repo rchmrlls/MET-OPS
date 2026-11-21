@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hd = trim((string)($_POST['ht_description'] ?? ''));
                 $qd = trim((string)($_POST['qb_description'] ?? ''));
                 $um = trim((string)($_POST['u_m'] ?? ''));
+                $packsPerBoxInput = trim((string)($_POST['packs_per_box'] ?? ''));
                 $price = trim((string)($_POST['default_price'] ?? ''));
                 if ($price !== '') {
                     $validPrice = preg_match('/^\d+(?:\.\d{1,2})?$/D', $price) || preg_match('/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/D', $price);
@@ -36,6 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (strlen(explode('.', $price, 2)[0]) > 10) throw new RuntimeException('Price exceeds the supported amount.');
                 }
                 $kg = trim((string)($_POST['kg_per_box'] ?? ''));
+                $packsPerBox = null;
+                if ($packsPerBoxInput !== '') {
+                    if (!preg_match('/^\d{1,6}$/D', $packsPerBoxInput) || (int)$packsPerBoxInput < 1) throw new RuntimeException('Packs per box must be a positive whole number.');
+                    $packsPerBox = (int)$packsPerBoxInput;
+                }
                 $active = ($_POST['active'] ?? '1') === '1' ? 1 : 0;
                 if (!$id && (!$name || !$ht || !$qb || !$hd || !$qd)) throw new RuntimeException('New products need a name, both codes, and both descriptions.');
                 if ($name === '' || mb_strlen($name) > 255 || mb_strlen($ht) > 100 || mb_strlen($qb) > 100 || mb_strlen($hd) > 255 || mb_strlen($qd) > 255 || mb_strlen($um) > 40) throw new RuntimeException('A product field is missing or too long.');
@@ -51,11 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $q->execute([$id]);
                     $previous = $q->fetchColumn();
                     if ($previous === false) throw new RuntimeException('Product not found.');
-                    $pdo->prepare('UPDATE products SET product_name=?,ht_code=?,qb_code=?,ht_description=?,qb_description=?,item_code=?,description=?,u_m=?,default_price=?,kg_per_box=?,active=? WHERE id=?')->execute([$name, $ht ?: null, $qb ?: null, $hd ?: null, $qd ?: null, $qb ?: null, $qd ?: null, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $active, $id]);
+                    $pdo->prepare('UPDATE products SET product_name=?,ht_code=?,qb_code=?,ht_description=?,qb_description=?,item_code=?,description=?,u_m=?,default_price=?,kg_per_box=?,packs_per_box=?,active=? WHERE id=?')->execute([$name, $ht ?: null, $qb ?: null, $hd ?: null, $qd ?: null, $qb ?: null, $qd ?: null, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox, $active, $id]);
                     $actionLog = (int)$previous === $active ? 'UPDATE' : ($active ? 'ACTIVATE' : 'DEACTIVATE');
                     log_activity($pdo, $actionLog, 'product', $id, 'Updated product ' . $name);
                 } else {
-                    $pdo->prepare('INSERT INTO products(product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,active) VALUES(?,?,?,?,?,?,?,?,?,?,1)')->execute([$name, $ht, $qb, $hd, $qd, $qb, $qd, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg]);
+                    $pdo->prepare('INSERT INTO products(product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,packs_per_box,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,1)')->execute([$name, $ht, $qb, $hd, $qd, $qb, $qd, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox]);
                     $id = (int)$pdo->lastInsertId();
                     log_activity($pdo, 'CREATE', 'product', $id, 'Created product ' . $name);
                 }
@@ -153,7 +159,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
     <div class="table-responsive catalog-table-wrap" tabindex="0" aria-label="Product master table">
         <table class="table catalog-table">
             <thead>
-                <tr><?php foreach (['Product Name', 'HT Code', 'Invoice Code', 'HT Description', 'Invoice Description', 'U/M', 'Price (PHP)', 'KG/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Status</th>
+                <tr><?php foreach (['Product Name', 'HT Code', 'Invoice Code', 'HT Description', 'Invoice Description', 'Invoice U/M', 'Price (PHP)', 'KG/Box', 'Packs/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Status</th>
                         <th scope="col">Actions</th><?php endif; ?>
                 </tr>
             </thead>
@@ -173,17 +179,18 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                         <td class="catalog-number"><?= $p['default_price'] !== null ? '₱' . number_format((float)$p['default_price'], 2, '.', ',') : '—' ?></td>
                         <td class="catalog-number"><?= $p['kg_per_box'] !== null ? number_format((float)$p['kg_per_box'], 3) : '—' ?></td>
                         <?php if ($manager): ?>
+                            <td><?= e($p['packs_per_box'] ?? '') ?></td>
                             <td><span class="status-pill <?= $inactive ? 'status-muted' : 'status-success' ?>"><?= $inactive ? 'Inactive' : 'Active' ?></span><?php if ($missing): ?><span class="catalog-missing-note">Mapping incomplete</span><?php endif; ?></td>
                             <td>
                                 <div class="catalog-actions">
-                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-edit data-id="<?= (int)$p['id'] ?>" data-name="<?= e($p['product_name']) ?>" data-ht="<?= e($p['ht_code'] ?? '') ?>" data-qb="<?= e($p['qb_code'] ?? '') ?>" data-ht-description="<?= e($p['ht_description'] ?? '') ?>" data-qb-description="<?= e($p['qb_description'] ?? '') ?>" data-um="<?= e($p['u_m'] ?? '') ?>" data-price="<?= e($p['default_price'] ?? '') ?>" data-kg="<?= e($p['kg_per_box'] ?? '') ?>" data-active="<?= (int)$p['active'] ?>"><i class="bi bi-pencil" aria-hidden="true"></i><span>Edit</span></button>
+                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-edit data-id="<?= (int)$p['id'] ?>" data-name="<?= e($p['product_name']) ?>" data-ht="<?= e($p['ht_code'] ?? '') ?>" data-qb="<?= e($p['qb_code'] ?? '') ?>" data-ht-description="<?= e($p['ht_description'] ?? '') ?>" data-qb-description="<?= e($p['qb_description'] ?? '') ?>" data-um="<?= e($p['u_m'] ?? '') ?>" data-price="<?= e($p['default_price'] ?? '') ?>" data-kg="<?= e($p['kg_per_box'] ?? '') ?>" data-packs="<?= e($p['packs_per_box'] ?? '') ?>" data-active="<?= (int)$p['active'] ?>"><i class="bi bi-pencil" aria-hidden="true"></i><span>Edit</span></button>
                                     <?php if ($deleteBlocked): ?><span class="catalog-delete-note" title="Referenced by <?= $p['withdrawal_refs'] ?> withdrawal line(s) and <?= $p['invoice_refs'] ?> invoice line(s)">In use · deactivate to retain history</span><?php else: ?><form method="post" data-confirm-submit="This permanently deletes <?= e($p['product_name']) ?>. This action cannot be undone." data-confirm-title="Delete product?" data-confirm-button="Delete product"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="id" value="<?= (int)$p['id'] ?>"><button class="btn btn-light btn-sm catalog-delete" type="submit" aria-label="Delete <?= e($p['product_name']) ?>"><i class="bi bi-trash3" aria-hidden="true"></i></button></form><?php endif; ?>
                                 </div>
                             </td><?php endif; ?>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (!$products): ?><tr>
-                        <td colspan="<?= $manager ? '10' : '8' ?>">
+                        <td colspan="<?= $manager ? '11' : '9' ?>">
                             <div class="catalog-empty"><strong><?= $search !== '' ? 'No products found.' : ($productStatus === 'inactive' ? 'No inactive products.' : ($manager ? 'No product records yet.' : 'No active products yet.')) ?></strong><span><?= $search !== '' ? 'Try another search or clear the filters.' : 'Product records will appear here when available.' ?></span><?php if ($manager && $search === '' && $productStatus !== 'inactive'): ?><button class="btn btn-primary btn-sm mt-2" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-create>Add Product</button><?php endif; ?></div>
                         </td>
                     </tr><?php endif; ?>
@@ -269,11 +276,12 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                         <fieldset class="catalog-fieldset mb-0">
                             <legend>Product details</legend>
                             <div class="row g-3">
-                                <div class="col-md-4"><label class="form-label" for="productUm">U/M</label><input class="form-control" id="productUm" name="u_m" maxlength="40" value="<?= e($postedProduct['u_m'] ?? '') ?>" placeholder="e.g. BOX"></div>
+                                <div class="col-md-4"><label class="form-label" for="productUm">Invoice U/M</label><input class="form-control" id="productUm" name="u_m" maxlength="40" value="<?= e($postedProduct['u_m'] ?? '') ?>" placeholder="e.g. BOTTLE"><div class="form-text">Unit used by invoice lines and prices.</div></div>
                                 <div class="col-md-4"><label class="form-label" for="productPrice">Price</label>
                                     <div class="input-group"><span class="input-group-text">&#8369;</span><input class="form-control currency-input" id="productPrice" name="default_price" type="text" inputmode="decimal" value="<?= e($postedProduct['default_price'] ?? '') ?>"></div>
                                 </div>
                                 <div class="col-md-4"><label class="form-label" for="productKg">KG/Box</label><input class="form-control" id="productKg" name="kg_per_box" type="number" min="0" step="0.001" value="<?= e($postedProduct['kg_per_box'] ?? '') ?>"></div>
+                                <div class="col-md-4"><label class="form-label" for="productPacks">Packs per box</label><input class="form-control" id="productPacks" name="packs_per_box" type="number" min="1" step="1" value="<?= e($postedProduct['packs_per_box'] ?? '') ?>"><div class="form-text">Invoice quantity = withdrawal boxes × packs per box. Leave blank to use the box quantity unchanged.</div></div>
                                 <div class="col-md-5"><label class="form-label" for="productActive">Status</label><select class="form-select" id="productActive" name="active">
                                         <option value="1" <?= ($postedProduct['active'] ?? '1') === '1' ? 'selected' : '' ?>>Active</option>
                                         <option value="0" <?= ($postedProduct['active'] ?? '') === '0' ? 'selected' : '' ?>>Inactive</option>
@@ -329,6 +337,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
             productForm.elements.default_price.value = editing ? data.price : '';
             window.formatCurrencyInput(productForm.elements.default_price);
             productForm.elements.kg_per_box.value = editing ? data.kg : '';
+            productForm.elements.packs_per_box.value = editing ? data.packs : '';
             productForm.elements.active.value = editing ? data.active : '1';
             productModal.querySelector('#productModalTitle').textContent = editing ? 'Edit Product' : 'Add Product';
             productForm.querySelectorAll('[data-product-required]').forEach(input => input.required = !editing || productForm.elements.active.value === '1');
@@ -345,6 +354,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                 um: button.dataset.um,
                 price: button.dataset.price,
                 kg: button.dataset.kg,
+                packs: button.dataset.packs,
                 active: button.dataset.active
             }, true);
             else if (button?.hasAttribute('data-product-create')) fillProduct({}, false);

@@ -2,16 +2,16 @@
 
 require __DIR__ . '/includes/layout_start.php';
 $pdo = db();
-$stats = [];
-foreach (['Draft', 'Ready for Invoicing', 'Invoice Preparation', 'Invoiced'] as $st) {
-    $s = $pdo->prepare('SELECT COUNT(*) FROM withdrawals WHERE status=?');
-    $s->execute([$st]);
-    $stats[$st] = (int)$s->fetchColumn();
-}
+$stats = $pdo->query("SELECT
+    COALESCE(SUM(status = 'Draft'), 0) AS draft,
+    COALESCE(SUM(status = 'Ready for Invoicing'), 0) AS ready,
+    COALESCE(SUM(status = 'Invoice Preparation'), 0) AS preparation,
+    COALESCE(SUM(status = 'Invoiced'), 0) AS invoiced
+    FROM withdrawals")->fetch();
 /* QuickBooks queue indicator temporarily disabled.
 $queue = (int)$pdo->query("SELECT COUNT(*) FROM qb_jobs WHERE status IN ('Queued','Processing')")->fetchColumn();
 */
-$recent = $pdo->query('SELECT w.withdrawal_no,w.form_date,w.status,c.client_name,COUNT(wi.id) item_count FROM withdrawals w JOIN clients c ON c.id=w.client_id LEFT JOIN withdrawal_items wi ON wi.withdrawal_id=w.id GROUP BY w.id ORDER BY w.id DESC LIMIT 6')->fetchAll(); ?>
+$recent = $pdo->query('SELECT w.id,w.withdrawal_no,w.form_date,w.saved_on,w.status,c.client_name,COUNT(wi.id) item_count FROM withdrawals w JOIN clients c ON c.id=w.client_id LEFT JOIN withdrawal_items wi ON wi.withdrawal_id=w.id GROUP BY w.id ORDER BY w.saved_on DESC,w.id DESC LIMIT 6')->fetchAll(); ?>
 <div class="page-intro">
     <div>
         <h2>Welcome, <?= e($_SESSION['user']['name']) ?></h2>
@@ -22,13 +22,18 @@ $recent = $pdo->query('SELECT w.withdrawal_no,w.form_date,w.status,c.client_name
 <div class="card-grid">
     <div class="stat-card">
         <div class="stat-top"><span>Draft Withdrawals</span><i class="bi bi-file-earmark-text-fill stat-icon" aria-hidden="true"></i></div>
-        <div class="stat-value"><?= number_format($stats['Draft']) ?></div>
+        <div class="stat-value"><?= number_format((int)$stats['draft']) ?></div>
         <div class="stat-note">Awaiting completion</div>
     </div>
     <div class="stat-card">
         <div class="stat-top"><span>Ready for Invoicing</span><i class="bi bi-receipt-cutoff stat-icon" aria-hidden="true"></i></div>
-        <div class="stat-value"><?= number_format($stats['Ready for Invoicing']) ?></div>
+        <div class="stat-value"><?= number_format((int)$stats['ready']) ?></div>
         <div class="stat-note">Available to invoice</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-top"><span>Invoice Preparation</span><i class="bi bi-pencil-square stat-icon" aria-hidden="true"></i></div>
+        <div class="stat-value"><?= number_format((int)$stats['preparation']) ?></div>
+        <div class="stat-note">Invoice details in progress</div>
     </div>
     <?php if (false): // QuickBooks processing card temporarily disabled; retained for later reactivation. ?>
     <div class="stat-card">
@@ -39,7 +44,7 @@ $recent = $pdo->query('SELECT w.withdrawal_no,w.form_date,w.status,c.client_name
     <?php endif; ?>
     <div class="stat-card">
         <div class="stat-top"><span>Invoiced Withdrawals</span><i class="bi bi-check2-circle stat-icon" aria-hidden="true"></i></div>
-        <div class="stat-value"><?= number_format($stats['Invoiced']) ?></div>
+        <div class="stat-value"><?= number_format((int)$stats['invoiced']) ?></div>
         <div class="stat-note">Confirmed status only</div>
     </div>
 </div>

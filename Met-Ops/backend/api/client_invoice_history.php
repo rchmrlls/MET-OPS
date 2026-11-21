@@ -23,7 +23,7 @@ try {
     $pages = max(1, (int)ceil($total / $perPage));
     $page = min($page, $pages);
     $offset = ($page - 1) * $perPage;
-    $query = $pdo->prepare("SELECT i.id, i.invoice_number, i.invoice_date, i.status,
+    $query = $pdo->prepare("SELECT i.id, i.invoice_number, i.invoice_date, i.status, i.printed_at,
             w.withdrawal_no, COALESCE(invoice_totals.item_count,0) AS item_count,
             COALESCE(invoice_totals.total_quantity,0) AS total_quantity,
             COALESCE(i.print_total_due,invoice_totals.invoice_amount) AS invoice_amount

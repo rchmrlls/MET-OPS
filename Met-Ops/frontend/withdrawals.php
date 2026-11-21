@@ -60,7 +60,7 @@ $records = $s->fetchAll();
                         <td>
                             <?php if (($r['internal_note'] ?? '') !== ''): ?>
                                 <details class="withdrawal-register-note">
-                                    <summary style="color:red; font-weight:bold;">
+                                    <summary>
                                         <?= e($r['internal_note']) ?>
                                     </summary>
                                 </details>
