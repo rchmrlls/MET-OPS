@@ -177,7 +177,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                         <td><span class="catalog-description" title="<?= e($p['qb_description'] ?? '') ?>" aria-label="Invoice Description: <?= e($p['qb_description'] ?? 'Not set') ?>"><?= e($p['qb_description'] ?? '—') ?></span></td>
                         <td><?= e($p['u_m'] ?? '—') ?></td>
                         <td class="catalog-number"><?= $p['default_price'] !== null ? '₱' . number_format((float)$p['default_price'], 2, '.', ',') : '—' ?></td>
-                        <td class="catalog-number"><?= $p['kg_per_box'] !== null ? number_format((float)$p['kg_per_box'], 3) : '—' ?></td>
+                        <td class="catalog-number"><?= $p['kg_per_box'] !== null ? rtrim(rtrim(number_format((float)$p['kg_per_box'], 3, '.', ''), '0'), '.') : '—' ?></td>
                         <?php if ($manager): ?>
                             <td><?= e($p['packs_per_box'] ?? '') ?></td>
                             <td><span class="status-pill <?= $inactive ? 'status-muted' : 'status-success' ?>"><?= $inactive ? 'Inactive' : 'Active' ?></span><?php if ($missing): ?><span class="catalog-missing-note">Mapping incomplete</span><?php endif; ?></td>
