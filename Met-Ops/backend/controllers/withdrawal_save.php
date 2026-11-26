@@ -228,6 +228,7 @@ try {
         $searchLabel = $readString($item, 'product_search');
         $productIdRaw = $readString($item, 'product_id');
         $qty = $readString($item, 'quantity');
+        $unit = $readString($item, 'unit');
         $remarks = $readString($item, 'remarks');
 
         /*
@@ -237,9 +238,17 @@ try {
             $searchLabel === '' &&
             $productIdRaw === '' &&
             $qty === '' &&
+            ($unit === '' || $unit === 'box') &&
             $remarks === ''
         ) {
             continue;
+        }
+
+        if ($unit === '') {
+            $unit = 'box';
+        }
+        if (!in_array($unit, ['box', 'packs'], true)) {
+            throw new RuntimeException('Select a valid unit for every item row.');
         }
 
         /*
@@ -306,6 +315,7 @@ try {
         $valid[] = [
             'product' => $product,
             'quantity' => $quantity,
+            'unit' => $unit,
             'remarks' => $remarks
         ];
     }
@@ -489,8 +499,9 @@ try {
             ht_code,
             ht_description,
             quantity,
+            unit,
             remarks
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
     foreach ($valid as $index => $item) {
@@ -502,6 +513,7 @@ try {
             $item['product']['ht_code'],
             $item['product']['ht_description'],
             $item['quantity'],
+            $item['unit'],
             $item['remarks'] !== '' ? $item['remarks'] : null
         ]);
     }

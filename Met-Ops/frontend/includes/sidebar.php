@@ -8,6 +8,7 @@
         <a class="nav-link <?= nav_active('invoice_preparation.php') ?>" href="invoice_preparation.php"><i class="bi bi-receipt-cutoff nav-icon" aria-hidden="true"></i>Invoice Preparation</a>
         <a class="nav-link <?= nav_active('invoices.php') ?>" href="invoices.php"><i class="bi bi-printer nav-icon" aria-hidden="true"></i>Invoice Archive</a>
         <a class="nav-link <?= nav_active('sales_order_preparation.php') ?>" href="sales_order_preparation.php"><i class="bi bi-file-earmark-text nav-icon" aria-hidden="true"></i>Sales Order Preparation</a>
+        <!-- <a class="nav-link <?= nav_active('inventory.php') ?>" href="inventory.php"><i class="bi bi-printer nav-icon" aria-hidden="true"></i>Inventory Management</a> -->
         <!-- QuickBooks status navigation is temporarily disabled.
         <a class="nav-link <?= nav_active('quickbooks_status.php') ?>" href="quickbooks_status.php"><i class="bi bi-arrow-repeat nav-icon" aria-hidden="true"></i>QuickBooks Status</a>
         -->

@@ -28,6 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hd = trim((string)($_POST['ht_description'] ?? ''));
                 $qd = trim((string)($_POST['qb_description'] ?? ''));
                 $um = trim((string)($_POST['u_m'] ?? ''));
+                $vatClassification = (string)($_POST['vat_classification'] ?? 'vatable');
+                if (!in_array($vatClassification, ['vatable', 'non_vatable'], true)) throw new RuntimeException('Select VATable or Non-VATable for VAT Classification.');
                 $packsPerBoxInput = trim((string)($_POST['packs_per_box'] ?? ''));
                 $price = trim((string)($_POST['default_price'] ?? ''));
                 if ($price !== '') {
@@ -57,11 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $q->execute([$id]);
                     $previous = $q->fetchColumn();
                     if ($previous === false) throw new RuntimeException('Product not found.');
-                    $pdo->prepare('UPDATE products SET product_name=?,ht_code=?,qb_code=?,ht_description=?,qb_description=?,item_code=?,description=?,u_m=?,default_price=?,kg_per_box=?,packs_per_box=?,active=? WHERE id=?')->execute([$name, $ht ?: null, $qb ?: null, $hd ?: null, $qd ?: null, $qb ?: null, $qd ?: null, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox, $active, $id]);
+                    $pdo->prepare('UPDATE products SET product_name=?,ht_code=?,qb_code=?,ht_description=?,qb_description=?,item_code=?,description=?,u_m=?,default_price=?,kg_per_box=?,packs_per_box=?,vat_classification=?,active=? WHERE id=?')->execute([$name, $ht ?: null, $qb ?: null, $hd ?: null, $qd ?: null, $qb ?: null, $qd ?: null, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox, $vatClassification, $active, $id]);
                     $actionLog = (int)$previous === $active ? 'UPDATE' : ($active ? 'ACTIVATE' : 'DEACTIVATE');
                     log_activity($pdo, $actionLog, 'product', $id, 'Updated product ' . $name);
                 } else {
-                    $pdo->prepare('INSERT INTO products(product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,packs_per_box,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,1)')->execute([$name, $ht, $qb, $hd, $qd, $qb, $qd, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox]);
+                    $pdo->prepare('INSERT INTO products(product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,packs_per_box,vat_classification,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1)')->execute([$name, $ht, $qb, $hd, $qd, $qb, $qd, $um ?: null, $price === '' ? null : $price, $kg === '' ? null : $kg, $packsPerBox, $vatClassification]);
                     $id = (int)$pdo->lastInsertId();
                     log_activity($pdo, 'CREATE', 'product', $id, 'Created product ' . $name);
                 }
@@ -138,6 +140,8 @@ require __DIR__ . '/includes/layout_start.php'; ?>
 <?php
 $reviewProducts = array_filter($products, static fn($p) => trim((string)($p['ht_code'] ?? '')) === '' || trim((string)($p['qb_code'] ?? '')) === '' || trim((string)($p['ht_description'] ?? '')) === '' || trim((string)($p['qb_description'] ?? '')) === '');
 if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="status"><strong>Mapping review:</strong> <?= count($reviewProducts) ?> displayed product(s) need code or description mappings. Complete HT Codes from the authoritative HT list before using these products in new withdrawals.</div><?php endif; ?>
+<?php $unclassifiedProducts = array_filter($products, static fn($p) => !in_array($p['vat_classification'] ?? null, ['vatable', 'non_vatable'], true));
+if ($manager && $unclassifiedProducts): ?><div class="alert alert-warning" role="status"><strong>VAT classification review:</strong> <?= count($unclassifiedProducts) ?> displayed product(s) still need a VAT Classification. They cannot be used on new invoices until classified.</div><?php endif; ?>
 
 <section class="panel catalog-panel mb-4" aria-labelledby="productMasterTitle">
     <div class="catalog-heading">
@@ -159,7 +163,8 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
     <div class="table-responsive catalog-table-wrap" tabindex="0" aria-label="Product master table">
         <table class="table catalog-table">
             <thead>
-                <tr><?php foreach (['Product Name', 'HT Code', 'Invoice Code', 'HT Description', 'Invoice Description', 'Invoice U/M', 'Price (PHP)', 'KG/Box', 'Packs/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Status</th>
+                <tr><?php foreach (['Product Name', 'VAT Classification', 'HT Code', 'Invoice Code', 'HT Description', 'Invoice Description', 'Invoice U/M', 'Price (PHP)', 'KG/Box'] as $heading): ?><th scope="col"><?= e($heading) ?></th><?php endforeach; ?><?php if ($manager): ?><th scope="col">Packs/Box</th>
+                        <th scope="col">Status</th>
                         <th scope="col">Actions</th><?php endif; ?>
                 </tr>
             </thead>
@@ -171,6 +176,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                 ?>
                     <tr>
                         <td class="catalog-name"><?= e($p['product_name']) ?></td>
+                        <td><?= e(($p['vat_classification'] ?? '') === 'vatable' ? 'VATable' : (($p['vat_classification'] ?? '') === 'non_vatable' ? 'Non-VATable' : 'Needs classification')) ?></td>
                         <td class="catalog-code"><?= e($p['ht_code'] ?? '') ?><?php if (empty($p['ht_code'])): ?><span class="catalog-missing">Missing</span><?php endif; ?></td>
                         <td class="catalog-code"><?= e($p['qb_code'] ?? '') ?><?php if (empty($p['qb_code'])): ?><span class="catalog-missing">Missing</span><?php endif; ?></td>
                         <td><span class="catalog-description" title="<?= e($p['ht_description'] ?? '') ?>" aria-label="HT Description: <?= e($p['ht_description'] ?? 'Not set') ?>"><?= e($p['ht_description'] ?? '—') ?></span></td>
@@ -183,14 +189,14 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                             <td><span class="status-pill <?= $inactive ? 'status-muted' : 'status-success' ?>"><?= $inactive ? 'Inactive' : 'Active' ?></span><?php if ($missing): ?><span class="catalog-missing-note">Mapping incomplete</span><?php endif; ?></td>
                             <td>
                                 <div class="catalog-actions">
-                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-edit data-id="<?= (int)$p['id'] ?>" data-name="<?= e($p['product_name']) ?>" data-ht="<?= e($p['ht_code'] ?? '') ?>" data-qb="<?= e($p['qb_code'] ?? '') ?>" data-ht-description="<?= e($p['ht_description'] ?? '') ?>" data-qb-description="<?= e($p['qb_description'] ?? '') ?>" data-um="<?= e($p['u_m'] ?? '') ?>" data-price="<?= e($p['default_price'] ?? '') ?>" data-kg="<?= e($p['kg_per_box'] ?? '') ?>" data-packs="<?= e($p['packs_per_box'] ?? '') ?>" data-active="<?= (int)$p['active'] ?>"><i class="bi bi-pencil" aria-hidden="true"></i><span>Edit</span></button>
+                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-edit data-id="<?= (int)$p['id'] ?>" data-name="<?= e($p['product_name']) ?>" data-ht="<?= e($p['ht_code'] ?? '') ?>" data-qb="<?= e($p['qb_code'] ?? '') ?>" data-ht-description="<?= e($p['ht_description'] ?? '') ?>" data-qb-description="<?= e($p['qb_description'] ?? '') ?>" data-um="<?= e($p['u_m'] ?? '') ?>" data-price="<?= e($p['default_price'] ?? '') ?>" data-kg="<?= e($p['kg_per_box'] ?? '') ?>" data-packs="<?= e($p['packs_per_box'] ?? '') ?>" data-vat-classification="<?= e($p['vat_classification'] ?? '') ?>" data-active="<?= (int)$p['active'] ?>"><i class="bi bi-pencil" aria-hidden="true"></i><span>Edit</span></button>
                                     <?php if ($deleteBlocked): ?><span class="catalog-delete-note" title="Referenced by <?= $p['withdrawal_refs'] ?> withdrawal line(s) and <?= $p['invoice_refs'] ?> invoice line(s)">In use · deactivate to retain history</span><?php else: ?><form method="post" data-confirm-submit="This permanently deletes <?= e($p['product_name']) ?>. This action cannot be undone." data-confirm-title="Delete product?" data-confirm-button="Delete product"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="id" value="<?= (int)$p['id'] ?>"><button class="btn btn-light btn-sm catalog-delete" type="submit" aria-label="Delete <?= e($p['product_name']) ?>"><i class="bi bi-trash3" aria-hidden="true"></i></button></form><?php endif; ?>
                                 </div>
                             </td><?php endif; ?>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (!$products): ?><tr>
-                        <td colspan="<?= $manager ? '11' : '9' ?>">
+                        <td colspan="<?= $manager ? '12' : '9' ?>">
                             <div class="catalog-empty"><strong><?= $search !== '' ? 'No products found.' : ($productStatus === 'inactive' ? 'No inactive products.' : ($manager ? 'No product records yet.' : 'No active products yet.')) ?></strong><span><?= $search !== '' ? 'Try another search or clear the filters.' : 'Product records will appear here when available.' ?></span><?php if ($manager && $search === '' && $productStatus !== 'inactive'): ?><button class="btn btn-primary btn-sm mt-2" type="button" data-bs-toggle="modal" data-bs-target="#productModal" data-product-create>Add Product</button><?php endif; ?></div>
                         </td>
                     </tr><?php endif; ?>
@@ -276,12 +282,20 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                         <fieldset class="catalog-fieldset mb-0">
                             <legend>Product details</legend>
                             <div class="row g-3">
-                                <div class="col-md-4"><label class="form-label" for="productUm">Invoice U/M</label><input class="form-control" id="productUm" name="u_m" maxlength="40" value="<?= e($postedProduct['u_m'] ?? '') ?>" placeholder="e.g. BOTTLE"><div class="form-text">Unit used by invoice lines and prices.</div></div>
+                                <div class="col-md-4"><label class="form-label" for="productUm">Invoice U/M</label><input class="form-control" id="productUm" name="u_m" maxlength="40" value="<?= e($postedProduct['u_m'] ?? '') ?>" placeholder="e.g. BOTTLE">
+                                    <div class="form-text">Unit used by invoice lines and prices.</div>
+                                </div>
                                 <div class="col-md-4"><label class="form-label" for="productPrice">Price</label>
                                     <div class="input-group"><span class="input-group-text">&#8369;</span><input class="form-control currency-input" id="productPrice" name="default_price" type="text" inputmode="decimal" value="<?= e($postedProduct['default_price'] ?? '') ?>"></div>
                                 </div>
                                 <div class="col-md-4"><label class="form-label" for="productKg">KG/Box</label><input class="form-control" id="productKg" name="kg_per_box" type="number" min="0" step="0.001" value="<?= e($postedProduct['kg_per_box'] ?? '') ?>"></div>
-                                <div class="col-md-4"><label class="form-label" for="productPacks">Packs per box</label><input class="form-control" id="productPacks" name="packs_per_box" type="number" min="1" step="1" value="<?= e($postedProduct['packs_per_box'] ?? '') ?>"><div class="form-text">Invoice quantity = withdrawal boxes × packs per box. Leave blank to use the box quantity unchanged.</div></div>
+                                <div class="col-md-4"><label class="form-label" for="productPacks">Packs per box</label><input class="form-control" id="productPacks" name="packs_per_box" type="number" min="1" step="1" value="<?= e($postedProduct['packs_per_box'] ?? '') ?>">
+                                    <div class="form-text">Invoice quantity = withdrawal boxes × packs per box. Leave blank to use the box quantity unchanged.</div>
+                                </div>
+                                <div class="col-md-4"><label class="form-label" for="productVatClassification">VAT Classification <span class="required-mark">*</span></label><select class="form-select" id="productVatClassification" name="vat_classification" required>
+                                        <option value="vatable" <?= ($postedProduct['vat_classification'] ?? 'vatable') === 'vatable' ? 'selected' : '' ?>>VATable</option>
+                                        <option value="non_vatable" <?= ($postedProduct['vat_classification'] ?? '') === 'non_vatable' ? 'selected' : '' ?>>Non-VATable</option>
+                                    </select></div>
                                 <div class="col-md-5"><label class="form-label" for="productActive">Status</label><select class="form-select" id="productActive" name="active">
                                         <option value="1" <?= ($postedProduct['active'] ?? '1') === '1' ? 'selected' : '' ?>>Active</option>
                                         <option value="0" <?= ($postedProduct['active'] ?? '') === '0' ? 'selected' : '' ?>>Inactive</option>
@@ -338,6 +352,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
             window.formatCurrencyInput(productForm.elements.default_price);
             productForm.elements.kg_per_box.value = editing ? data.kg : '';
             productForm.elements.packs_per_box.value = editing ? data.packs : '';
+            productForm.elements.vat_classification.value = editing ? (data.vatClassification || 'vatable') : 'vatable';
             productForm.elements.active.value = editing ? data.active : '1';
             productModal.querySelector('#productModalTitle').textContent = editing ? 'Edit Product' : 'Add Product';
             productForm.querySelectorAll('[data-product-required]').forEach(input => input.required = !editing || productForm.elements.active.value === '1');
@@ -355,6 +370,7 @@ if ($manager && $reviewProducts): ?><div class="alert alert-warning" role="statu
                 price: button.dataset.price,
                 kg: button.dataset.kg,
                 packs: button.dataset.packs,
+                vatClassification: button.dataset.vatClassification,
                 active: button.dataset.active
             }, true);
             else if (button?.hasAttribute('data-product-create')) fillProduct({}, false);

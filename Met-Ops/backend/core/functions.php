@@ -70,7 +70,7 @@ function get_sites(PDO $pdo): array
 }
 function get_products(PDO $pdo): array
 {
-    return $pdo->query('SELECT id,product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,packs_per_box,qb_list_id,active FROM products WHERE active=1 ORDER BY product_name')->fetchAll();
+    return $pdo->query('SELECT id,product_name,ht_code,qb_code,ht_description,qb_description,item_code,description,u_m,default_price,kg_per_box,packs_per_box,qb_list_id,vat_classification,active FROM products WHERE active=1 ORDER BY product_name')->fetchAll();
 }
 
 function withdrawal_product_label(string $name, ?string $description): string

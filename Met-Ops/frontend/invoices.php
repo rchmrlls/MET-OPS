@@ -149,7 +149,7 @@ require __DIR__ . '/includes/layout_start.php';
             </table>
         </div>
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span class="small text-secondary">Showing <?= $offset + 1 ?>–<?= min($offset + $pageSize, $total) ?> of <?= $total ?> invoices</span>
+            <!-- <span class="small text-secondary">Showing <?= $offset + 1 ?>–<?= min($offset + $pageSize, $total) ?> of <?= $total ?> invoices</span> -->
             <?php if ($totalPages > 1): ?>
                 <nav aria-label="Invoice archive pages" class="d-flex gap-2">
                     <?php

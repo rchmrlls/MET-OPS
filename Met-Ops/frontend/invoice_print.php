@@ -101,6 +101,8 @@ $rowHeights = [
     29 => 16.5, 30 => 28.5, 31 => 18, 32 => 16.5,
     33 => 12.75, 34 => 15, 35 => 18.75,
 ];
+$address = trim((string) ($invoice['customer_address_snapshot'] ?? ''));
+$customerDetailsStartColumn = 5;
 $columnWidths = [48, 28.5, 60.75, 7.5, 129, 69.75, 48, 60.75, 40.5, 82.5];
 $columnTemplate = implode(' ', array_map(
     static fn(float $width): string => number_format($width * 0.72, 2, '.', '') . 'pt',
@@ -156,11 +158,12 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
             font-size: 8.64pt; font-weight: 400;
         }
         .cell-overflow { overflow: visible; white-space: nowrap; overflow-wrap: normal; }
+        .cell-address { overflow: visible; white-space: pre-line; overflow-wrap: anywhere; }
         .cell-clip { overflow: hidden; white-space: nowrap; overflow-wrap: normal; }
         .cell-item-description {
             overflow: visible; white-space: nowrap; overflow-wrap: normal;
         }
-        .cell-left { padding-left: 4pt; }
+        .cell-left, .cell-customer-start { padding-left: 4pt; }
         .cell-date { padding-left: 12pt; font-size: 9.36pt; }
         .cell-customer { font-size: 9.36pt; }
         .cell-large { font-size: 9.36pt; }
@@ -216,11 +219,11 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
         };
         $formatDateValue = $formatDate($invoice['invoice_date']);
         $setCell(2, 9, $formatDateValue, 'cell-overflow cell-date', 2);
-        $setCell(4, 5, (string) ($invoice['customer_name_snapshot'] ?? ''), 'cell-overflow cell-left cell-customer', 4);
+        $setCell(4, $customerDetailsStartColumn, (string) ($invoice['customer_name_snapshot'] ?? ''), 'cell-overflow cell-customer-start cell-customer', 4);
         $setCell(6, 3, (string) ($invoice['customer_tin_snapshot'] ?? ''), 'cell-overflow cell-left cell-large');
         $poNumber = trim((string) ($invoice['po_no'] ?? ''));
         $setCell(6, 9, '' . $poNumber, 'cell-clip cell-date', 2);
-        $setCell(7, 5, (string) ($invoice['customer_address_snapshot'] ?? ''), 'cell-overflow cell-left', 5);
+        $setCell(7, $customerDetailsStartColumn, $address, 'cell-address cell-customer-start', 5);
         for ($lineIndex = 0; $lineIndex < 14; $lineIndex++) {
             $row = 12 + $lineIndex;
             $printLine = $invoiceLines[$lineIndex] ?? null;
@@ -280,7 +283,11 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
                 <?php for ($row = 1; $row <= 35; $row++): ?>
                     <?php
                     $height = ($rowHeights[$row] ?? 15) * 0.72;
-                    $rowStyle = 'height:' . number_format($height, 2, '.', '') . 'pt;';
+                    // Let the address row grow to its wrapped content while preserving
+                    // its original position and minimum height in the invoice layout.
+                    $rowStyle = $row === 7
+                        ? 'min-height:' . number_format($height, 2, '.', '') . 'pt;'
+                        : 'height:' . number_format($height, 2, '.', '') . 'pt;';
                     ?>
                     <div class="worksheet-row" style="<?= e($rowStyle) ?>">
                         <?php for ($column = 1; $column <= 10; $column++): ?>
@@ -299,27 +306,32 @@ $invoiceTitle = 'Invoice ' . (string) $invoice['invoice_number'];
 
     <script src="assets/js/invoice-print.js"></script>
     <script>
-        document.getElementById('printInvoice').addEventListener('click', async () => {
-            const registered = await window.registerInvoicePrint(
-                document.querySelector('meta[name="invoice-id"]').content,
-                document.querySelector('meta[name="invoice-print-token"]').content,
-                document.querySelector('meta[name="csrf-token"]').content
-            );
-            if (!registered) {
-                window.alert('The print status could not be saved. You can still print, but the archive may continue to show Not Printed.');
+        let printRegistrationPromise = null;
+        const registerPrintOnce = () => {
+            if (!printRegistrationPromise) {
+                printRegistrationPromise = window.registerInvoicePrint(
+                    document.querySelector('meta[name="invoice-id"]').content,
+                    document.querySelector('meta[name="invoice-print-token"]').content,
+                    document.querySelector('meta[name="csrf-token"]').content
+                );
             }
+            return printRegistrationPromise;
+        };
+
+        document.getElementById('printInvoice').addEventListener('click', async () => {
+            const registration = registerPrintOnce();
             try {
                 window.print();
             } catch (error) {
                 window.alert('The browser could not open the print dialog. Please try again or use the browser menu.');
+                return;
+            }
+            if (!(await registration)) {
+                window.alert('The print status could not be saved. You can still print, but the archive may continue to show Not Printed.');
             }
         });
         window.addEventListener('beforeprint', () => {
-            window.registerInvoicePrint(
-                document.querySelector('meta[name="invoice-id"]').content,
-                document.querySelector('meta[name="invoice-print-token"]').content,
-                document.querySelector('meta[name="csrf-token"]').content
-            );
+            registerPrintOnce();
         });
     </script>
 </body>

@@ -10,9 +10,14 @@ require_login();
 |--------------------------------------------------------------------------
 */
 
+$withdrawalId = filter_var(
+    $_GET['withdrawal_id'] ?? null,
+    FILTER_VALIDATE_INT,
+    ['options' => ['min_range' => 1]]
+);
 $no = trim((string) ($_GET['withdrawal_no'] ?? ''));
 
-if ($no === '') {
+if (!$withdrawalId && $no === '') {
     http_response_code(400);
     exit('Withdrawal number is required.');
 }
@@ -20,20 +25,20 @@ if ($no === '') {
 $pdo = db();
 
 $stmt = $pdo->prepare(
-    'SELECT w.*, c.client_name
-     FROM withdrawals w
-     JOIN clients c ON c.id = w.client_id
-     WHERE w.withdrawal_no = ?
-     LIMIT 1'
+    $withdrawalId
+        ? 'SELECT w.*, c.client_name FROM withdrawals w JOIN clients c ON c.id = w.client_id WHERE w.id = ? LIMIT 1'
+        : 'SELECT w.*, c.client_name FROM withdrawals w JOIN clients c ON c.id = w.client_id WHERE w.withdrawal_no = ? LIMIT 1'
 );
 
-$stmt->execute([$no]);
+$stmt->execute([$withdrawalId ?: $no]);
 $withdrawal = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$withdrawal) {
     http_response_code(404);
     exit('Withdrawal not found.');
 }
+
+$no = (string) $withdrawal['withdrawal_no'];
 
 /*
 |--------------------------------------------------------------------------
@@ -45,7 +50,8 @@ $stmt = $pdo->prepare(
     'SELECT
         wi.*,
         p.u_m,
-        p.kg_per_box
+        p.kg_per_box,
+        p.packs_per_box
      FROM withdrawal_items wi
      LEFT JOIN products p ON p.id = wi.product_id
      WHERE wi.withdrawal_id = ?
@@ -61,29 +67,33 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 |--------------------------------------------------------------------------
 */
 
-function print_qty($value): string
-{
-    if ($value === null || $value === '' || !is_numeric($value)) {
-        return '';
-    }
+if (!function_exists('print_qty')) {
+    function print_qty($value): string
+    {
+        if ($value === null || $value === '' || !is_numeric($value)) {
+            return '';
+        }
 
-    return rtrim(
-        rtrim(number_format((float) $value, 3, '.', ''), '0'),
-        '.'
-    );
+        return rtrim(
+            rtrim(number_format((float) $value, 3, '.', ''), '0'),
+            '.'
+        );
+    }
 }
 
-function print_time(?string $value): string
-{
-    if (!$value) {
-        return '';
+if (!function_exists('print_time')) {
+    function print_time(?string $value): string
+    {
+        if (!$value) {
+            return '';
+        }
+
+        $timestamp = strtotime($value);
+
+        return $timestamp === false
+            ? ''
+            : date('h:i A', $timestamp);
     }
-
-    $timestamp = strtotime($value);
-
-    return $timestamp === false
-        ? ''
-        : date('h:i A', $timestamp);
 }
 
 $formDateTimestamp = strtotime((string) ($withdrawal['form_date'] ?? ''));
@@ -114,8 +124,8 @@ $itemCount = count($items);
         */
 
         @page {
-            size: A4 portrait;
-            margin: 9mm 10mm;
+            size: Letter portrait;
+            margin: 19mm 19.5mm 9mm;
         }
 
         * {
@@ -127,11 +137,11 @@ $itemCount = count($items);
             margin: 0;
             padding: 0;
             color: #111;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: Calibri, Arial, Helvetica, sans-serif;
         }
 
         body {
-            font-size: 9px;
+            font-size: 10.4px;
         }
 
         table {
@@ -169,7 +179,7 @@ $itemCount = count($items);
         */
 
         .sheet {
-            width: 190mm;
+            width: 176.8mm;
             max-width: 100%;
             margin: 0 auto;
         }
@@ -181,7 +191,7 @@ $itemCount = count($items);
         */
 
         .header-table {
-            height: 32mm;
+            height: 19mm;
         }
 
         .header-table td,
@@ -200,7 +210,7 @@ $itemCount = count($items);
         .company-logo {
             display: block;
             width: 100%;
-            max-height: 18mm;
+            max-height: 17mm;
             object-fit: contain;
             object-position: left center;
         }
@@ -224,9 +234,9 @@ $itemCount = count($items);
         }
 
         .meta-cell {
-            height: 7mm;
-            padding: 3px 4px;
-            font-size: 9px;
+            height: 4.5mm;
+            padding: 1px 4px;
+            font-size: 10px;
         }
 
         .meta-label strong {
@@ -274,7 +284,7 @@ $itemCount = count($items);
         */
 
         .spacer-band td {
-            height: 5mm;
+            height: 4mm;
         }
 
         .orange-band {
@@ -283,7 +293,7 @@ $itemCount = count($items);
 
         .po-row td,
         .po-row th {
-            height: 9mm;
+            height: 8mm;
         }
 
         .po-label-cell {
@@ -304,10 +314,10 @@ $itemCount = count($items);
         |
         | Column widths total 100%:
         | Line      5%
-        | Product  55%
+        | Product  45%
         | Quantity 10%
         | Total KG 12%
-        | Remarks  18%
+        | Remarks  28%
         |
         */
 
@@ -320,7 +330,7 @@ $itemCount = count($items);
         }
 
         .items-table .product-col {
-            width: 55%;
+            width: 45%;
         }
 
         .items-table .qty-col {
@@ -332,19 +342,19 @@ $itemCount = count($items);
         }
 
         .items-table .remarks-col {
-            width: 18%;
+            width: 28%;
         }
 
         .items-table th {
             height: 9mm;
             padding: 2px 3px;
-            font-size: 8.5px;
+            font-size: 11.2px;
             font-weight: 700;
             text-align: center;
         }
 
         .items-table td {
-            height: 5.45mm;
+            height: 4.2mm;
             padding: 1px 3px;
             vertical-align: middle;
             overflow-wrap: anywhere;
@@ -372,7 +382,7 @@ $itemCount = count($items);
 
         .remarks-cell {
             color: #f00;
-            font-size: 8px;
+            font-size: 10.4px;
         }
 
         .nothing-follows {
@@ -392,7 +402,7 @@ $itemCount = count($items);
         }
 
         .footer-table td {
-            height: 6.2mm;
+            height: 4.2mm;
             padding: 2px 3px;
         }
 
@@ -406,7 +416,7 @@ $itemCount = count($items);
         }
 
         .approved {
-            height: 10mm !important;
+            height: 6.2mm !important;
             font-weight: 700;
         }
 
@@ -447,15 +457,15 @@ $itemCount = count($items);
             }
 
             .sheet {
-                width: 100%;
-                max-width: none;
-                margin: 0;
+                width: 176.8mm;
+                max-width: 100%;
+                margin: 0 auto;
                 box-shadow: none;
             }
 
             body {
                 padding: 0;
-                font-size: 9px;
+                font-size: 10.4px;
             }
 
             .items-table .qty-col {
@@ -616,7 +626,9 @@ $itemCount = count($items);
                     if ($item !== null) {
                         $qtyText = is_numeric($item['quantity'] ?? null) ? number_format((float) $item['quantity'], 0, '.', ',') : '';
 
-                        $unit = trim((string) ($item['u_m'] ?? ''));
+                        $unit = ($item['unit'] ?? 'box') === 'packs'
+                            ? 'PK'
+                            : 'BOX';
 
                         if ($unit !== '') {
                             $qtyText .= ' ' . $unit;
@@ -625,15 +637,15 @@ $itemCount = count($items);
                         $kgPerBox = $item['kg_per_box'] ?? null;
                         $quantity = $item['quantity'] ?? null;
 
-                        if (
+                        if (($item['unit'] ?? 'box') === 'packs' && is_numeric($quantity)) {
+                            $kgText = print_qty((float) $quantity) . ' PK';
+                        } elseif (
                             $kgPerBox !== null &&
                             $kgPerBox !== '' &&
                             is_numeric($kgPerBox) &&
                             is_numeric($quantity)
                         ) {
-                            $totalKg = (float) $quantity * (float) $kgPerBox;
-
-                            $kgText = print_qty($totalKg) . ' KGS';
+                            $kgText = print_qty((float) $quantity * (float) $kgPerBox) . ' KGS';
                         }
                     }
 

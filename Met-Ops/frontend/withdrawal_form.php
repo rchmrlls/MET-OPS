@@ -93,7 +93,7 @@ foreach ($clients as $client) {
 $productWeights = [];
 
 $weightStmt = $pdo->query(
-    'SELECT id, kg_per_box
+    'SELECT id, kg_per_box, packs_per_box
      FROM products
      WHERE active = 1
        AND kg_per_box IS NOT NULL'
@@ -110,6 +110,7 @@ foreach ($weightStmt->fetchAll(PDO::FETCH_ASSOC) as $weightRow) {
     ) {
         $productWeights[$productId] = (float) $kgPerBox;
     }
+
 }
 
 
@@ -144,6 +145,7 @@ $emptyItem = [
     'product_id' => '',
     'product_name' => '',
     'quantity' => '',
+    'unit' => 'box',
     'remarks' => ''
 ];
 
@@ -390,6 +392,10 @@ foreach ($values as $item) {
                             Quantity
                         </th>
 
+                        <th scope="col" class="withdrawal-unit-column">
+                            Unit
+                        </th>
+
                         <th scope="col" class="withdrawal-kg-column">
                             Total KG
                         </th>
@@ -420,15 +426,12 @@ foreach ($values as $item) {
 
                         $lineTotalKg = null;
 
-                        if (
-                            $lineProductId !== '' &&
-                            $lineQuantity !== '' &&
-                            is_numeric($lineQuantity) &&
-                            isset($productWeights[$lineProductId])
-                        ) {
-                            $lineTotalKg =
-                                (float) $lineQuantity *
-                                $productWeights[$lineProductId];
+                        if ($lineProductId !== '' && $lineQuantity !== '' && is_numeric($lineQuantity)) {
+                            if (($it['unit'] ?? 'box') === 'packs') {
+                                $lineTotalKg = (float) $lineQuantity;
+                            } elseif (isset($productWeights[$lineProductId])) {
+                                $lineTotalKg = (float) $lineQuantity * $productWeights[$lineProductId];
+                            }
                         }
                         ?>
 
@@ -464,6 +467,16 @@ foreach ($values as $item) {
                             </td>
 
                             <td>
+                                <select
+                                    class="form-select table-input item-unit"
+                                    name="items[<?= $i ?>][unit]"
+                                    aria-label="Unit for line <?= $i + 1 ?>">
+                                    <option value="box" <?= ($it['unit'] ?? 'box') === 'packs' ? '' : 'selected' ?>>Box</option>
+                                    <option value="packs" <?= ($it['unit'] ?? 'box') === 'packs' ? 'selected' : '' ?>>Packs</option>
+                                </select>
+                            </td>
+
+                            <td class="withdrawal-kg-cell">
                                 <input
                                     type="text"
                                     class="form-control table-input total-kg"
@@ -612,9 +625,25 @@ foreach ($values as $item) {
             function closeSuggestions() {
                 list.hidden = true;
                 list.replaceChildren();
+                list.style.maxHeight = '';
+                root.classList.remove('suggestions-up');
                 input.setAttribute('aria-expanded', 'false');
                 input.removeAttribute('aria-activedescendant');
                 activeIndex = -1;
+            }
+
+            function positionSuggestions() {
+                if (list.hidden) return;
+                const tableWrap = root.closest('.withdrawal-table-wrap');
+                if (!tableWrap) return;
+                const inputRect = input.getBoundingClientRect();
+                const wrapRect = tableWrap.getBoundingClientRect();
+                const expectedHeight = Math.min(240, matches.length * 42);
+                const spaceBelow = Math.max(0, wrapRect.bottom - inputRect.bottom - 3);
+                const spaceAbove = Math.max(0, inputRect.top - wrapRect.top - 3);
+                const openAbove = spaceBelow < expectedHeight && spaceAbove > spaceBelow;
+                root.classList.toggle('suggestions-up', openAbove);
+                list.style.maxHeight = `${Math.min(240, openAbove ? spaceAbove : spaceBelow)}px`;
             }
 
             function choose(product) {
@@ -651,6 +680,7 @@ foreach ($values as $item) {
                 });
                 list.hidden = matches.length === 0;
                 input.setAttribute('aria-expanded', matches.length ? 'true' : 'false');
+                if (matches.length) positionSuggestions();
             }
 
             function setActive(index) {
@@ -665,6 +695,9 @@ foreach ($values as $item) {
             }
 
             input.addEventListener('input', renderSuggestions);
+            const tableWrap = root.closest('.withdrawal-table-wrap');
+            tableWrap?.addEventListener('scroll', positionSuggestions, { passive: true });
+            window.addEventListener('resize', positionSuggestions);
             input.addEventListener('keydown', event => {
                 if (event.key === 'ArrowDown' && !list.hidden) {
                     event.preventDefault();
@@ -714,6 +747,11 @@ foreach ($values as $item) {
             }
 
             const quantity = Number(quantityText);
+            if (row.querySelector('.item-unit').value === 'packs') {
+                totalKgInput.value = Number.isFinite(quantity) && quantity > 0 ? String(quantity) : '';
+                return;
+            }
+
             const kgPerBox = productWeights.get(productId);
 
             if (
@@ -792,6 +830,7 @@ foreach ($values as $item) {
                     'aria-label',
                     'Quantity for line ' + lineNumber
                 );
+                row.querySelector('.item-unit').setAttribute('aria-label', 'Unit for line ' + lineNumber);
 
                 row.querySelector('.item-remarks').setAttribute(
                     'aria-label',
@@ -808,6 +847,9 @@ foreach ($values as $item) {
                         /items\[\d+\]/,
                         'items[' + index + ']'
                     );
+                });
+                row.querySelectorAll('select').forEach((select) => {
+                    select.name = select.name.replace(/items\[\d+\]/, 'items[' + index + ']');
                 });
             });
 
@@ -837,6 +879,7 @@ foreach ($values as $item) {
             newRow.querySelectorAll('input').forEach((input) => {
                 input.value = '';
             });
+            newRow.querySelector('.item-unit').value = 'box';
             const suggestions = newRow.querySelector('.withdrawal-product-suggestions');
             suggestions.replaceChildren();
             suggestions.hidden = true;
@@ -869,7 +912,7 @@ foreach ($values as $item) {
 
             const hasData = [...row.querySelectorAll('input')].some((input) => {
                 return input.value.trim() !== '';
-            });
+            }) || row.querySelector('.item-unit').value === 'packs';
 
             if (hasData) {
                 const result = await Swal.fire({
@@ -894,6 +937,7 @@ foreach ($values as $item) {
                 row.querySelectorAll('input').forEach((input) => {
                     input.value = '';
                 });
+                row.querySelector('.item-unit').value = 'box';
             }
 
             renumberRows();
@@ -913,6 +957,8 @@ foreach ($values as $item) {
 
                 updateTotalKg(row);
                 updateCounters();
+            } else if (event.target.classList.contains('item-unit')) {
+                updateTotalKg(event.target.closest('tr'));
             }
         });
 

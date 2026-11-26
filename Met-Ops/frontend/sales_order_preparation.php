@@ -78,7 +78,12 @@ $total = array_sum(array_map(static fn(array $line): float => (float)$line['amou
 ?>
 <div class="page-intro">
     <div><h2>Sales Order Preparation</h2><p>Local Sales Order draft for withdrawal <?= e($withdrawalNo) ?>. Existing invoice records remain separate.</p></div>
-    <div class="toolbar"><a href="withdrawals.php" class="btn btn-light"><i class="bi bi-arrow-left" aria-hidden="true"></i> Select withdrawal</a></div>
+    <div class="toolbar">
+        <?php if (trim((string)($order['so_number'] ?? '')) !== '' && $lines): ?>
+            <a class="btn btn-outline-primary" href="sales_order_dr.php?sales_order_id=<?= (int)$order['id'] ?>" target="_blank" rel="noopener">Delivery Receipt (DR)</a>
+        <?php endif; ?>
+        <a href="withdrawals.php" class="btn btn-light"><i class="bi bi-arrow-left" aria-hidden="true"></i> Select withdrawal</a>
+    </div>
 </div>
 <!-- QuickBooks submission and mapping notice temporarily disabled.
 <div class="notice warning mb-3"><strong>Local preparation only:</strong> this Sales Order is saved in this application. QuickBooks submission and live customer/item mapping validation are not available. CLASS, STATUS, FULFILLED QUANTITY, and TAX are retained as local preparation values and are not verified QuickBooks mappings.</div>

@@ -62,7 +62,7 @@ if (!$inv) {
     $iid = (int) $pdo->lastInsertId();
 
     $s = $pdo->prepare(
-        'SELECT wi.*, p.qb_code, p.qb_description, p.u_m,
+        'SELECT wi.*, p.qb_code, p.qb_description, p.u_m, p.vat_classification,
                 p.default_price,p.packs_per_box
          FROM withdrawal_items wi
          LEFT JOIN products p ON p.id = wi.product_id
@@ -75,23 +75,25 @@ if (!$inv) {
 
     $ins = $pdo->prepare(
         'INSERT INTO invoice_items
-         (invoice_id, withdrawal_item_id, source_type, product_id, site_id,
+         (invoice_id, withdrawal_item_id, source_type, source_unit, product_id, site_id,
           product_name, quantity, item_code, description, u_m,
-          price_each, amount, created_by, updated_by)
-         VALUES (?, ?, "WITHDRAWAL", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          price_each, amount, tax_code, created_by, updated_by)
+         VALUES (?, ?, "WITHDRAWAL", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
 
     foreach ($copy as $it) {
         $price = (float) ($it['default_price'] ?? 0);
         $sourceQuantity = (int) $it['quantity'];
         $packsPerBox = (int) ($it['packs_per_box'] ?? 0);
-        $quantity = $packsPerBox > 0 && $sourceQuantity <= intdiv(999999999, $packsPerBox)
+        $isPacks = ($it['unit'] ?? 'box') === 'packs';
+        $quantity = !$isPacks && $packsPerBox > 0 && $sourceQuantity <= intdiv(999999999, $packsPerBox)
             ? $sourceQuantity * $packsPerBox
             : $sourceQuantity;
 
         $ins->execute([
             $iid,
             $it['id'],
+            ($it['unit'] ?? 'box') === 'packs' ? 'packs' : 'box',
             $it['product_id'],
             $defaultSiteId,
             $it['product_name'],
@@ -101,6 +103,7 @@ if (!$inv) {
             $it['u_m'],
             $price,
             $price * $quantity,
+            ($it['vat_classification'] ?? '') === 'vatable' ? 'Tax' : 'Non',
             $_SESSION['user']['id'],
             $_SESSION['user']['id']
         ]);
@@ -122,9 +125,10 @@ if (!$inv) {
 }
 
 $s = $pdo->prepare(
-    'SELECT ii.*, si.site_name
+    'SELECT ii.*, si.site_name, COALESCE(ii.source_unit, wi.unit, "box") AS source_unit
      FROM invoice_items ii
      LEFT JOIN sites si ON si.id = ii.site_id
+     LEFT JOIN withdrawal_items wi ON wi.id = ii.withdrawal_item_id
      WHERE ii.invoice_id = ?
      ORDER BY ii.id'
 );
@@ -353,6 +357,9 @@ foreach ($lines as $ln) {
                             </td>
 
                             <td>
+                                <?php if (($ln['source_type'] ?? '') === 'WITHDRAWAL' && ($ln['source_unit'] ?? 'box') === 'packs'): ?>
+                                    <small class="text-muted d-block">Packs</small>
+                                <?php endif; ?>
                                 <input
                                     class="form-control table-input invoice-qty"
                                     type="number"
@@ -382,7 +389,7 @@ foreach ($lines as $ln) {
 
                             <td>
                                 <div class="d-flex gap-1 invoice-description-picker"><select class="form-select table-input product-select" name="items[<?= $i ?>][product_id]" required aria-label="Product description" <?= $locked ? 'disabled' : '' ?>>
-                                        <option value="">Select description</option><?php foreach ($products as $pr): ?><option value="<?= (int)$pr['id'] ?>" data-code="<?= e($pr['qb_code'] ?? '') ?>" data-desc="<?= e($pr['qb_description'] ?? '') ?>" data-name="<?= e($pr['product_name'] ?? '') ?>" data-um="<?= e($pr['u_m'] ?? '') ?>" data-price="<?= e($pr['default_price'] ?? '') ?>" <?= (int)$ln['product_id'] === (int)$pr['id'] ? 'selected' : '' ?>><?= e($pr['qb_description'] ?? '') ?></option><?php endforeach; ?>
+                                        <option value="">Select description</option><?php foreach ($products as $pr): ?><option value="<?= (int)$pr['id'] ?>" data-code="<?= e($pr['qb_code'] ?? '') ?>" data-desc="<?= e($pr['qb_description'] ?? '') ?>" data-name="<?= e($pr['product_name'] ?? '') ?>" data-um="<?= e($pr['u_m'] ?? '') ?>" data-price="<?= e($pr['default_price'] ?? '') ?>" data-vat-classification="<?= e($pr['vat_classification'] ?? '') ?>" <?= (int)$ln['product_id'] === (int)$pr['id'] ? 'selected' : '' ?>><?= e($pr['qb_description'] ?? '') ?><?= empty($pr['vat_classification']) ? ' — NEEDS VAT CLASSIFICATION' : '' ?></option><?php endforeach; ?>
                                     </select><?php if (!$locked): ?><button type="button" class="btn btn-sm btn-outline-danger remove-invoice-line" title="Remove line" aria-label="Remove invoice line">×</button><?php endif; ?></div><input type="hidden" name="items[<?= $i ?>][description]" value="<?= e($ln['description'] ?? '') ?>"><input type="hidden" name="items[<?= $i ?>][product_name]" value="<?= e($ln['product_name']) ?>">
                             </td>
 
@@ -532,6 +539,8 @@ foreach ($lines as $ln) {
             row.querySelector("input[name$='[description]']").value = opt.dataset.desc || '';
             row.querySelector("input[name$='[product_name]']").value = opt.dataset.name || '';
             row.querySelector("input[name$='[u_m]']").value = opt.dataset.um || '';
+            const taxControl = row.querySelector('.invoice-tax');
+            if (taxControl) taxControl.value = opt.dataset.vatClassification === 'vatable' ? 'Tax' : 'Non';
             const price = row.querySelector('.invoice-price');
             if (!price.value || window.parseMoneyValue(price.value) === 0) price.value = window.formatMoneyValue(opt.dataset.price || 0);
             updateAmount(row);

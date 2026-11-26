@@ -56,10 +56,11 @@ try {
     }
     $raw = $_POST['items'] ?? [];
     if (!is_array($raw)) throw new RuntimeException('Invoice lines are invalid.');
-    $products = $pdo->prepare('SELECT id,product_name,qb_code,qb_description,item_code,description,u_m,qb_list_id FROM products WHERE id=? AND active=1');
+    $products = $pdo->prepare('SELECT id,product_name,qb_code,qb_description,item_code,description,u_m,qb_list_id,vat_classification FROM products WHERE id=? AND active=1');
     $codeMatches = $pdo->prepare('SELECT id FROM products WHERE LOWER(TRIM(qb_code))=LOWER(TRIM(?))');
     $sites = $pdo->prepare('SELECT id FROM sites WHERE id=? AND active=1');
-    $withdrawalLine = $pdo->prepare('SELECT product_id FROM withdrawal_items WHERE id=? AND withdrawal_id=?');
+    $withdrawalLine = $pdo->prepare('SELECT product_id,unit FROM withdrawal_items WHERE id=? AND withdrawal_id=?');
+    $existingInvoiceLine = $pdo->prepare('SELECT source_unit FROM invoice_items WHERE id=? AND invoice_id=?');
     $valid = [];
     foreach ($raw as $it) {
         if (!is_array($it)) throw new RuntimeException('Invoice lines are invalid.');
@@ -75,6 +76,7 @@ try {
         if (strlen(explode('.', $priceRaw, 2)[0]) > 10) throw new RuntimeException('PRICE EACH exceeds the supported amount.');
         $products->execute([$productId]); $product = $products->fetch();
         if (!$product) throw new RuntimeException('A selected product is inactive or invalid.');
+        if (!in_array($product['vat_classification'], ['vatable', 'non_vatable'], true)) throw new RuntimeException('This product needs a VAT Classification in Products & Sites before it can be used on an invoice.');
         $submittedCode = trim((string)($it['item_code'] ?? ''));
         if ($submittedCode === '' || strcasecmp($submittedCode, trim((string)$product['qb_code'])) !== 0) throw new RuntimeException('The selected QB Code does not match this product. Select the intended invoice item again.');
         $codeMatches->execute([$submittedCode]); $mappedIds=$codeMatches->fetchAll(PDO::FETCH_COLUMN);
@@ -90,13 +92,24 @@ try {
         $qty = (int)$qtyRaw; $price = (float)$priceRaw;
         $source = ($it['source_type'] ?? '') === 'ADDITIONAL' ? 'ADDITIONAL' : 'WITHDRAWAL';
         $wi = filter_var($it['withdrawal_item_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $lineId = filter_var($it['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $sourceUnit = null;
         if ($source === 'WITHDRAWAL' && $wi) {
             $withdrawalLine->execute([$wi, $inv['withdrawal_id']]);
-            $sourceProductId = $withdrawalLine->fetchColumn();
-            if ($sourceProductId === false || ($sourceProductId !== null && (int)$sourceProductId !== (int)$product['id'])) throw new RuntimeException('A source invoice line no longer matches this withdrawal product.');
+            $sourceItem = $withdrawalLine->fetch();
+            if (!$sourceItem || ($sourceItem['product_id'] !== null && (int)$sourceItem['product_id'] !== (int)$product['id'])) throw new RuntimeException('A source invoice line no longer matches this withdrawal product.');
+            $sourceUnit = $sourceItem['unit'] ?? 'box';
+        } elseif ($source === 'WITHDRAWAL' && $lineId) {
+            $existingInvoiceLine->execute([$lineId, $invoiceId]);
+            $sourceUnit = $existingInvoiceLine->fetchColumn();
+            if ($sourceUnit === false) throw new RuntimeException('A source invoice line is no longer available.');
+            $sourceUnit = $sourceUnit === null ? 'box' : $sourceUnit;
+        } elseif ($source === 'WITHDRAWAL') {
+            throw new RuntimeException('A source withdrawal line is required for every withdrawal invoice item.');
         }
+        if ($sourceUnit !== null && !in_array($sourceUnit, ['box', 'packs'], true)) throw new RuntimeException('An invoice line has an invalid source unit.');
         if (mb_strlen($it['lot_number'] ?? '') > 100 || mb_strlen($it['item_code'] ?? '') > 100 || mb_strlen($it['description'] ?? '') > 255 || mb_strlen($it['u_m'] ?? '') > 40) throw new RuntimeException('A line value exceeds its allowed length.');
-        $valid[] = ['product'=>$product,'site'=>$siteId,'qty'=>$qty,'price'=>$price,'tax'=>$tax,'print_type'=>$printType,'expiry'=>$expiry ?: null,'lot'=>trim((string)($it['lot_number'] ?? '')),'code'=>trim((string)($it['item_code'] ?? '')),'desc'=>trim((string)($it['description'] ?? '')),'um'=>trim((string)($it['u_m'] ?? '')),'source'=>$source,'wi'=>$source === 'WITHDRAWAL' && $wi ? $wi : null];
+        $valid[] = ['product'=>$product,'site'=>$siteId,'qty'=>$qty,'price'=>$price,'tax'=>$tax,'print_type'=>$printType,'expiry'=>$expiry ?: null,'lot'=>trim((string)($it['lot_number'] ?? '')),'code'=>trim((string)($it['item_code'] ?? '')),'desc'=>trim((string)($it['description'] ?? '')),'um'=>trim((string)($it['u_m'] ?? '')),'source'=>$source,'source_unit'=>$sourceUnit,'wi'=>$source === 'WITHDRAWAL' && $wi ? $wi : null];
     }
     if (!$valid) throw new RuntimeException('Add at least one valid invoice line.');
     $calculationItems = [];
@@ -146,11 +159,11 @@ try {
         $invoiceId
     ]);
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invoiceId]);
-    $ins = $pdo->prepare('INSERT INTO invoice_items(invoice_id,withdrawal_item_id,source_type,product_id,site_id,product_name,quantity,lot_number,item_code,description,u_m,price_each,amount,tax_code,print_type,expiration_date,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins = $pdo->prepare('INSERT INTO invoice_items(invoice_id,withdrawal_item_id,source_type,source_unit,product_id,site_id,product_name,quantity,lot_number,item_code,description,u_m,price_each,amount,tax_code,print_type,expiration_date,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($valid as $line) {
         $p = $line['product'];
         $amount = round($line['qty'] * $line['price'], 2, PHP_ROUND_HALF_UP);
-        $ins->execute([$invoiceId,$line['wi'],$line['source'],$p['id'],$line['site'],$p['product_name'],$line['qty'],$line['lot'] ?: null,$p['qb_code'], $p['qb_description'],$p['u_m'],$line['price'],$amount,$line['tax'],$line['print_type'],$line['expiry'],$_SESSION['user']['id'],$_SESSION['user']['id']]);
+        $ins->execute([$invoiceId,$line['wi'],$line['source'],$line['source_unit'],$p['id'],$line['site'],$p['product_name'],$line['qty'],$line['lot'] ?: null,$p['qb_code'], $p['qb_description'],$p['u_m'],$line['price'],$amount,$line['tax'],$line['print_type'],$line['expiry'],$_SESSION['user']['id'],$_SESSION['user']['id']]);
     }
     log_activity($pdo,'SAVE_DRAFT','invoice',$invoiceId,'Saved invoice draft for '.$no.' with '.count($valid).' line(s)');
     $pdo->commit(); flash('success','Invoice draft saved. The source withdrawal was not changed.');
